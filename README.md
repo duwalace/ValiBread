@@ -16,18 +16,18 @@ O sistema rastreia os produtos de panificação desde a saída da linha de produ
 * **Assistente Virtual (Chatbot):** Acesso rápido a consultas de estoque, indicadores de desempenho e alertas via chatbot em dispositivos móveis.
 * **Alertas e Reposição:** Emissão de notificações em tempo real e sugestões automáticas de produção/reposição baseadas no fluxo de vendas.
 
-## 🛠️ Tecnologias Utilizadas (Sugestão)
+## 🛠️ Tecnologias Utilizadas
 
-* **Backend:** Node.js com Express
-* **Frontend:** React (Web) / React Native (Mobile)
-* **Banco de Dados:** PostgreSQL (relacional, ideal para integridade de transações de estoque)
-* **Infraestrutura/Containers:** Docker
-* **Integração IoT/Hardware:** Leitores RFID integrados via API REST/MQTT
+* **Backend:** Node.js 
+* **Frontend Web:** React.js
+* **Frontend Mobile:** React Native
+* **Banco de Dados & BaaS:** Supabase (PostgreSQL)
+* **Integração IoT/Hardware:** Leitores RFID 
 
 ## ⚙️ Como Executar o Projeto
 
 ### Pré-requisitos
-Certifique-se de ter o [Node.js](https://nodejs.org/), [Docker](https://www.docker.com/) e o [Git](https://git-scm.com/) instalados em sua máquina.
+Certifique-se de ter o [Node.js](https://nodejs.org/) e o [Git](https://git-scm.com/) instalados em sua máquina. Para o banco de dados, você precisará de uma conta configurada no [Supabase](https://supabase.com/).
 
 ### Passos para Instalação
 
@@ -38,21 +38,22 @@ Acesse a pasta do projeto:
 
 Bash
 cd nome-do-repositorio
-Instale as dependências do Backend e Frontend:
+Instale as dependências do Backend, Frontend Web e Mobile:
 
 Bash
 cd backend && npm install
-cd ../frontend && npm install
-Configure as variáveis de ambiente criando um arquivo .env baseado no .env.example.
+cd ../web && npm install
+cd ../mobile && npm install
+Configure as variáveis de ambiente criando os arquivos .env baseados nos .env.example (incluindo as chaves da API do Supabase).
 
-Inicie o banco de dados e os serviços via Docker:
+Inicie as aplicações:
 
-Bash
-docker-compose up -d
-Inicie a aplicação:
+No backend: npm run dev
 
-Bash
-npm run dev
+No frontend web: npm run start (ou npm run dev dependendo do seu bundler)
+
+No mobile: npx expo start (caso usem Expo)
+
 📈 Impacto e Benefícios Esperados
 Redução expressiva de erros operacionais e retrabalhos.
 
