@@ -1,7 +1,16 @@
 import { Bell, LogOut, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 const DashboardHeader = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+    navigate("/login");
+  };
+
   return (
     <header className="flex items-center justify-between px-6 py-4 border-b border-border">
       {/* Logo e título */}
@@ -41,7 +50,13 @@ const DashboardHeader = () => {
         </div>
 
         {/* Sair */}
-        <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-secondary">
+        <Button
+          id="btn-logout"
+          variant="outline"
+          size="sm"
+          onClick={handleLogout}
+          className="border-border text-foreground hover:bg-secondary"
+        >
           <LogOut className="w-4 h-4 mr-1" />
           Sair
         </Button>

@@ -1,5 +1,30 @@
+# Pasta de documentação local (não versionar)
+docs/
+
+# Variáveis de ambiente e segredos
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Chaves e certificados privados
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+*.keystore
+
+# Dependências e artefatos de build
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+.nyc_output/
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,18 +32,24 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
+# SO e editores
+.DS_Store
+Thumbs.db
+.idea/
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
+*.swp
+*.swo
 *.sw?
+
+# Arquivos locais de ferramentas (ex.: Vite)
+*.local
+
+# Caches e deploy local
+.cache/
+.turbo/
+.vercel/
