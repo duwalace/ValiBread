@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { usePerfis } from "@/hooks/usePerfis";
 import axios from "axios";
 
 interface FormData {
@@ -23,16 +24,10 @@ interface FormErros {
   id_perfil?: string;
 }
 
-const PERFIS = [
-  { value: "1", label: "Administrador" },
-  { value: "2", label: "Operador de Estoque" },
-  { value: "3", label: "Supervisor" },
-  { value: "4", label: "Visualizador" },
-];
-
 const Cadastro = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { data: perfis = [], isLoading: carregandoPerfis } = usePerfis();
 
   const [form, setForm] = useState<FormData>({
     nome: "",
@@ -359,7 +354,7 @@ const Cadastro = () => {
                 id="perfil"
                 value={form.id_perfil}
                 onChange={(e) => handleChange("id_perfil", e.target.value)}
-                disabled={carregando}
+                disabled={carregando || carregandoPerfis}
                 className={`w-full h-9 rounded-md border px-3 text-sm bg-secondary text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all ${
                   erros.id_perfil
                     ? "border-destructive focus:ring-destructive"
@@ -369,11 +364,11 @@ const Cadastro = () => {
                 aria-invalid={!!erros.id_perfil}
               >
                 <option value="" disabled>
-                  Selecione um perfil…
+                  {carregandoPerfis ? "Carregando perfis..." : "Selecione um perfil…"}
                 </option>
-                {PERFIS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
+                {perfis.map((p) => (
+                  <option key={p.id_perfil} value={String(p.id_perfil)}>
+                    {p.nome}
                   </option>
                 ))}
               </select>

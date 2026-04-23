@@ -1,9 +1,19 @@
-import { Bell, LogOut, MessageCircle } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
 const DashboardHeader = () => {
   const navigate = useNavigate();
+
+  // Lê dados do usuário salvo no localStorage durante o login
+  const usuarioRaw = localStorage.getItem("usuario");
+  const usuario = usuarioRaw ? JSON.parse(usuarioRaw) : null;
+  const nomeUsuario = usuario?.nome ?? "Usuário";
+  const iniciais = nomeUsuario
+    .split(" ")
+    .slice(0, 2)
+    .map((p: string) => p[0]?.toUpperCase() ?? "")
+    .join("");
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -25,19 +35,15 @@ const DashboardHeader = () => {
 
       {/* Lado direito */}
       <div className="flex items-center gap-4">
-        {/* Chat bot icon */}
-        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
-          <MessageCircle className="w-6 h-6 text-primary-foreground" />
-        </div>
 
         {/* Avatar + nome */}
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-            <span className="text-sm font-medium text-foreground">MS</span>
+            <span className="text-sm font-medium text-foreground">{iniciais}</span>
           </div>
           <div className="text-sm">
-            <p className="text-muted-foreground">Bem-vinda,</p>
-            <p className="font-medium text-foreground">Maria Silva</p>
+            <p className="text-muted-foreground">Bem-vindo(a),</p>
+            <p className="font-medium text-foreground">{nomeUsuario}</p>
           </div>
         </div>
 

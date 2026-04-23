@@ -1,8 +1,9 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { buscarUsuarioPorEmail, inserirUsuario } from './models/usuarioModel.js';
+import { buscarUsuarioPorEmail, inserirUsuario } from '../models/usuarioModel.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'chave_super_secreta_padrao';
+// C-01: Sem fallback inseguro — JWT_SECRET deve estar no .env
+const JWT_SECRET = process.env.JWT_SECRET;
 
 export const realizarLogin = async (email, senhaPlana) => {
 
