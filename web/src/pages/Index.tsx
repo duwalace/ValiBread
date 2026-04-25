@@ -25,20 +25,45 @@ const Index = () => {
         <DashboardHeader />
         <FiltersSection />
 
-        {/* Mudança 6: Grid dos cards */}
-        <div className="px-6 py-4 space-y-4">
+        {/* Bento Grid Layout - Foco no FEFO e fluxo orgânico */}
+        <div className="px-6 py-8 max-w-[1600px] mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 auto-rows-min">
+            
+            {/* Bloco 1: Alertas de Validade (ASSINATURA VISUAL) - Maior destaque */}
+            <div className="lg:col-span-8 lg:row-span-2 flex flex-col">
+              <div className="h-full w-full">
+                <ExpiryAlertCard />
+              </div>
+            </div>
 
-          {/* LINHA 1: 50% | 50% */}
-          <div className="grid grid-cols-2 gap-4">
-            <StockOverviewCard />
-            <ExpiryAlertCard />
-          </div>
+            {/* Bloco 2: Visão Geral - Acesso rápido a números */}
+            <div className="lg:col-span-4 lg:row-span-1 flex flex-col">
+              <div className="h-full w-full">
+                <StockOverviewCard />
+              </div>
+            </div>
 
-          {/* LINHA 2: 35% | 40% | 25% */}
-          <div className="grid gap-4" style={{ gridTemplateColumns: "35fr 40fr 25fr" }}>
-            <MovementReportCard />
-            <InventoryTableCard />
-            <CustomReportsCard />
+            {/* Bloco 3: Movimentações - Fluxo */}
+            <div className="lg:col-span-4 lg:row-span-1 flex flex-col">
+              <div className="h-full w-full">
+                <MovementReportCard />
+              </div>
+            </div>
+
+            {/* Bloco 4: Inventário Ativo - Tabela detalhada larga */}
+            <div className="lg:col-span-8 lg:row-span-2 flex flex-col">
+              <div className="h-full w-full">
+                <InventoryTableCard />
+              </div>
+            </div>
+
+            {/* Bloco 5: Relatórios Personalizados - Utilitário vertical */}
+            <div className="lg:col-span-4 lg:row-span-2 flex flex-col">
+              <div className="h-full w-full">
+                <CustomReportsCard />
+              </div>
+            </div>
+
           </div>
         </div>
 

@@ -15,11 +15,11 @@ import { Loader2, AlertCircle } from "lucide-react";
 const renderLegend = () => (
   <div className="flex items-center justify-start gap-5 mt-2 pl-1">
     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="w-2.5 h-2.5 rounded-full bg-[hsl(210,100%,54%)] inline-block" />
+      <span className="w-2.5 h-2.5 rounded-full bg-success inline-block" />
       Entradas
     </span>
     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="w-2.5 h-2.5 rounded-full bg-[hsl(30,95%,52%)] inline-block" />
+      <span className="w-2.5 h-2.5 rounded-full bg-primary inline-block" />
       Saídas
     </span>
   </div>
@@ -42,7 +42,7 @@ const MovementReportCard = () => {
   );
 
   return (
-    <div className="border border-border rounded-lg p-5 bg-card flex flex-col">
+    <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col">
       <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
         Relatório de Movimentação{" "}
         <span className="normal-case font-normal">(Mês Atual)</span>
@@ -80,14 +80,14 @@ const MovementReportCard = () => {
                   >
                     <YAxis
                       ticks={ticks}
-                      tick={{ fill: "hsl(220, 10%, 55%)", fontSize: 11 }}
+                      tick={{ fill: "hsl(30, 10%, 60%)", fontSize: 11 }}
                       axisLine={false}
                       tickLine={false}
                       width={32}
                     />
                     <XAxis
                       dataKey="nome"
-                      tick={{ fill: "hsl(220, 10%, 55%)", fontSize: 11 }}
+                      tick={{ fill: "hsl(30, 10%, 60%)", fontSize: 11 }}
                       axisLine={false}
                       tickLine={false}
                     />
@@ -95,14 +95,14 @@ const MovementReportCard = () => {
                     <Bar
                       dataKey="entradas"
                       name="Entradas"
-                      fill="hsl(210, 100%, 54%)"
+                      fill="hsl(142, 60%, 45%)"
                       radius={[4, 4, 0, 0]}
                       barSize={36}
                     />
                     <Bar
                       dataKey="saidas"
                       name="Saídas"
-                      fill="hsl(30, 95%, 52%)"
+                      fill="hsl(28, 90%, 55%)"
                       radius={[4, 4, 0, 0]}
                       barSize={36}
                     />

@@ -10,6 +10,7 @@ import pacoteRoutes from './pacoteRoutes.js';
 import alertaRoutes from './alertaRoutes.js';
 import sugestaoRoutes from './sugestaoRoutes.js';
 import relatorioRoutes from './relatorioRoutes.js';
+import exportRoutes from './exportRoutes.js';
 
 const router = express.Router();
 
@@ -32,6 +33,9 @@ router.use('/pacote', pacoteRoutes);
 router.use('/alerta', alertaRoutes);
 router.use('/sugestao', sugestaoRoutes);
 router.use('/relatorio', relatorioRoutes);
+
+// Exportação (PDF/Excel)
+router.use('/export', exportRoutes);
 
 // RFID (leitura, etiqueta, leitor, movimentação)
 router.use('/rfid', rfidRoutes);

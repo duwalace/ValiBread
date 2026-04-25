@@ -26,7 +26,7 @@ const ExpiryAlertCard = () => {
 
   return (
     // Correção 3: card com altura mínima aumentada para acomodar gráfico maior
-    <div className="border border-border rounded-lg p-5 bg-card flex flex-col min-h-[220px]">
+    <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col min-h-[220px]">
       <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
         Alerta de Validade (Próximos 7 Dias)
       </h3>

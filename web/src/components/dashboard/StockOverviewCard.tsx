@@ -59,7 +59,7 @@ const StockOverviewCard = () => {
   const lineData = buildLineData(movimentacaoMes, totalItens);
 
   return (
-    <div className="border border-border rounded-lg p-5 bg-card flex flex-col">
+    <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col">
       <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
         Visão Geral do Estoque
       </h3>

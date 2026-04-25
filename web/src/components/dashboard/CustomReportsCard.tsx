@@ -148,12 +148,60 @@ const CustomReportsCard = () => {
     }
   };
 
+  // ── Exportação ───────────────────────────────────────────────────
+  const [exportando, setExportando] = useState<"PDF" | "EXCEL" | null>(null);
+
+  const handleExport = async (formato: "PDF" | "EXCEL") => {
+    if (!validarPeriodo()) return;
+
+    try {
+      setExportando(formato);
+      const token = localStorage.getItem("token");
+
+      const params: Record<string, string> = {
+        formato,
+        dataInicio: brParaIso(dataInicio),
+        dataFim: brParaIso(dataFim),
+      };
+      if (tipo !== "TODOS") params.tipo = tipo;
+
+      const queryParams = new URLSearchParams(params);
+
+      // Usamos fetch pois o retorno é um blob (arquivo físico) e não JSON
+      const response = await fetch(`http://localhost:3000/api/export/inventario?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao exportar o relatório');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `relatorio_movimentacao.${formato === 'EXCEL' ? 'xlsx' : 'pdf'}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+    } catch (error) {
+      console.error(error);
+      setErroApi(`Erro ao exportar relatório em ${formato}.`);
+    } finally {
+      setExportando(null);
+    }
+  };
+
   // ── Render ─────────────────────────────────────────────────────
   const inputCls =
     "bg-secondary border-border text-foreground placeholder:text-muted-foreground text-sm pr-8 h-9";
 
   return (
-    <div className="border border-border rounded-lg p-4 bg-card flex flex-col gap-3">
+    <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col gap-3">
       <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
         Painel de Relatórios Personalizados
       </h3>
@@ -229,7 +277,7 @@ const CustomReportsCard = () => {
         id="btn-gerar-relatorio"
         onClick={gerarPreview}
         disabled={carregando}
-        className="w-full bg-[hsl(142,55%,40%)] hover:bg-[hsl(142,55%,35%)] text-white font-semibold"
+        className="w-full bg-success hover:bg-success/90 text-success-foreground font-semibold"
       >
         {carregando ? (
           <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando...</>
@@ -338,11 +386,21 @@ const CustomReportsCard = () => {
 
       {/* Exportar */}
       <div className="flex justify-center gap-5 text-xs text-muted-foreground pt-1 border-t border-border/50 mt-auto">
-        <button className="flex items-center gap-1.5 hover:text-foreground transition-colors py-0.5">
-          <FileDown className="w-3.5 h-3.5" /> Exportar PDF
+        <button 
+          onClick={() => handleExport("PDF")}
+          disabled={exportando !== null}
+          className="flex items-center gap-1.5 hover:text-foreground transition-colors py-0.5 disabled:opacity-50"
+        >
+          {exportando === "PDF" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} 
+          Exportar PDF
         </button>
-        <button className="flex items-center gap-1.5 hover:text-foreground transition-colors py-0.5">
-          <FileSpreadsheet className="w-3.5 h-3.5" /> Exportar Excel
+        <button 
+          onClick={() => handleExport("EXCEL")}
+          disabled={exportando !== null}
+          className="flex items-center gap-1.5 hover:text-foreground transition-colors py-0.5 disabled:opacity-50"
+        >
+          {exportando === "EXCEL" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />} 
+          Exportar Excel
         </button>
       </div>
     </div>

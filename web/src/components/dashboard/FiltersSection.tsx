@@ -52,10 +52,10 @@ const FiltersSection = () => {
   };
 
   const fieldClass =
-    "bg-[hsl(220,15%,18%)] border border-[hsl(220,15%,28%)] rounded-md text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all h-9 px-3 w-full";
+    "bg-input border border-border/50 rounded-md text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary transition-all h-9 px-3 w-full";
 
   return (
-    <div className="border border-border rounded-lg px-5 py-4 mx-6 mt-4">
+    <div className="border border-border/50 shadow-sm rounded-xl p-6 bg-card max-w-[1600px] mx-auto mt-6">
       <h3 className="text-xs font-semibold text-muted-foreground mb-3 italic">Filtros de Produtos</h3>
 
       {/* LINHA 1 — Dois date-range pickers ocupando 50% cada */}
@@ -134,7 +134,7 @@ const FiltersSection = () => {
           <Button
             id="btn-aplicar-filtros"
             onClick={aplicarFiltros}
-            className="w-full h-9 bg-[hsl(210,100%,50%)] hover:bg-[hsl(210,100%,44%)] text-white font-semibold text-sm rounded-md transition-colors"
+            className="w-full h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm rounded-md transition-colors"
           >
             Aplicar Filtros
           </Button>

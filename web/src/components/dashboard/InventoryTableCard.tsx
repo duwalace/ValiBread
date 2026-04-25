@@ -96,7 +96,7 @@ const InventoryTableCard = () => {
   };
 
   return (
-    <div className="border border-border rounded-lg p-5 bg-card flex flex-col">
+    <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col">
       {/* Cabeçalho do card com botão de ordenação */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">

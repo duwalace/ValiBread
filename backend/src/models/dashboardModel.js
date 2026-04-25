@@ -120,3 +120,76 @@ export const buscarInventarioFEFO = async (filtros = {}) => {
   if (error) throw new Error(`Erro ao buscar inventário FEFO: ${error.message}`);
   return data;
 };
+
+/**
+ * Busca o inventário ativo FEFO, mas recebendo o cliente Supabase com 
+ * o token do usuário injetado, garantindo Isolamento de Tenant via RLS.
+ */
+export const buscarInventarioFEFOSecure = async (filtros = {}, tenantSupabase) => {
+  let query = tenantSupabase
+    .from('pacote')
+    .select(`
+      id_pacote,
+      lote!inner (
+        id_lote,
+        codigo_lote,
+        data_fabricacao,
+        data_validade,
+        status,
+        produto!inner ( id_produto, nome )
+      ),
+      rfid_etiqueta ( epc, status )
+    `)
+    .order('data_validade', { referencedTable: 'lote', ascending: true });
+
+  if (filtros.categoria) query = query.ilike('lote.produto.nome', `%${filtros.categoria}%`);
+  if (filtros.lote) query = query.ilike('lote.codigo_lote', `%${filtros.lote}%`);
+  if (filtros.dataFabricacaoInicio) query = query.gte('lote.data_fabricacao', filtros.dataFabricacaoInicio);
+  if (filtros.dataFabricacaoFim) query = query.lte('lote.data_fabricacao', filtros.dataFabricacaoFim);
+  if (filtros.dataValidadeInicio) query = query.gte('lote.data_validade', filtros.dataValidadeInicio);
+  if (filtros.dataValidadeFim) query = query.lte('lote.data_validade', filtros.dataValidadeFim);
+  if (filtros.tagRfid) query = query.ilike('rfid_etiqueta.epc', `%${filtros.tagRfid}%`);
+
+  const { data, error } = await query;
+
+  if (error) throw new Error(`Erro ao buscar inventário FEFO seguro: ${error.message}`);
+  return data;
+};
+
+/**
+ * Busca as movimentações de estoque para relatórios personalizados,
+ * respeitando os filtros e injetando o cliente Supabase sandboxed (Isolamento de Tenant).
+ */
+export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, tenantSupabase) => {
+  let query = tenantSupabase
+    .from('movimentacao_estoque')
+    .select(`
+      id_movimentacao,
+      tipo_movimentacao,
+      data_hora,
+      pacote (
+        lote (
+          codigo_lote,
+          produto ( nome )
+        )
+      )
+    `)
+    .order('data_hora', { ascending: false });
+
+  if (filtros.tipo && filtros.tipo !== 'TODOS') {
+    query = query.eq('tipo_movimentacao', filtros.tipo);
+  }
+
+  if (filtros.dataInicio) {
+    query = query.gte('data_hora', `${filtros.dataInicio}T00:00:00.000Z`);
+  }
+
+  if (filtros.dataFim) {
+    query = query.lte('data_hora', `${filtros.dataFim}T23:59:59.999Z`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw new Error(`Erro ao buscar relatório de movimentações seguro: ${error.message}`);
+  return data;
+};
