@@ -99,8 +99,8 @@ export const atualizarLote = async (id, dados) => {
   const { data, error } = await supabase
     .from('lote')
     .update(dados)
-    .eq('id_lote', id)
-    .select()
+    .eq('id_lote', Number(id))
+    .select('*, produto ( id_produto, nome, estoque_minimo )')
     .single();
   if (error) throw new Error(`Erro ao atualizar lote: ${error.message}`);
   return data;
@@ -128,12 +128,14 @@ export const listarPacotes = async (filtros = {}) => {
     .from('pacote')
     .select(`
       id_pacote,
+      status,
       lote ( id_lote, codigo_lote, data_validade, status, produto ( nome ) ),
       rfid_etiqueta ( id_rfid, epc, status, data_associacao )
     `)
     .order('id_pacote', { ascending: false });
 
   if (filtros.id_lote) query = query.eq('id_lote', filtros.id_lote);
+  if (filtros.status)  query = query.eq('status', filtros.status);
 
   const { data, error } = await query;
   if (error) throw new Error(`Erro ao listar pacotes: ${error.message}`);
@@ -148,6 +150,42 @@ export const criarPacote = async (dados) => {
     .single();
   if (error) throw new Error(`Erro ao criar pacote: ${error.message}`);
   return data;
+};
+
+export const atualizarPacoteStatus = async (id, status) => {
+  const statusValidos = ['EM_ESTOQUE', 'SEPARADO', 'EXPEDIDO'];
+  if (!statusValidos.includes(status)) {
+    throw new Error(`Status inválido. Valores aceitos: ${statusValidos.join(', ')}`);
+  }
+  const { data, error } = await supabase
+    .from('pacote')
+    .update({ status })
+    .eq('id_pacote', Number(id))
+    .select(`
+      id_pacote,
+      status,
+      lote ( id_lote, codigo_lote, data_validade, status, produto ( nome ) ),
+      rfid_etiqueta ( id_rfid, epc, status, data_associacao )
+    `)
+    .single();
+  if (error) throw new Error(`Erro ao atualizar status do pacote: ${error.message}`);
+  return data;
+};
+
+export const deletarPacote = async (id) => {
+  const pacoteId = Number(id);
+
+  // Deleta as movimentações associadas
+  const { error: errorMov } = await supabase.from('movimentacao_estoque').delete().eq('id_pacote', pacoteId);
+  if (errorMov) throw new Error(`Erro ao deletar histórico de movimentações: ${errorMov.message}`);
+
+  // Deleta as associações RFID associadas
+  const { error: errorRfid } = await supabase.from('rfid_etiqueta').delete().eq('id_pacote', pacoteId);
+  if (errorRfid) throw new Error(`Erro ao deletar etiqueta RFID associada: ${errorRfid.message}`);
+
+  // Finalmente, deleta o pacote
+  const { error } = await supabase.from('pacote').delete().eq('id_pacote', pacoteId);
+  if (error) throw new Error(`Erro ao deletar pacote: ${error.message}`);
 };
 
 // ─────────────────────────────────────────────
@@ -167,6 +205,7 @@ export const listarAlertas = async (filtros = {}) => {
   if (error) throw new Error(`Erro ao listar alertas: ${error.message}`);
   return data;
 };
+
 
 export const criarAlerta = async (tipo_alerta, mensagem, id_lote) => {
   const { data, error } = await supabase

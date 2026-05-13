@@ -1,4 +1,12 @@
-import { inserirLeituraRaw, buscarEtiquetaPorEpc, registrarMovimentacao, buscarLeitorPorId, atualizarStatusEtiqueta } from '../models/rfidModel.js';
+import { 
+  inserirLeituraRaw, 
+  buscarEtiquetaPorEpc, 
+  registrarMovimentacao, 
+  buscarLeitorPorId, 
+  atualizarStatusEtiqueta,
+  buscarStatusPacote,
+  atualizarStatusPacote
+} from '../models/rfidModel.js';
 import { verificarEstoqueMinimo, verificarValidadeLote, verificarEtiquetaInativa } from './alertaService.js';
 
 /**
@@ -6,12 +14,14 @@ import { verificarEstoqueMinimo, verificarValidadeLote, verificarEtiquetaInativa
  * Assume palavras-chave no campo `localizacao`:
  *   - Contém "SAÍDA" ou "SAIDA" → SAÍDA
  *   - Contém "TRANSFER" → TRANSFERÊNCIA
+ *   - Contém "SEPAR" ou "EXPEDI" → SEPARACAO
  *   - Qualquer outro → ENTRADA
  */
 const inferirTipoMovimentacao = (localizacao = '') => {
   const loc = localizacao.toUpperCase();
-  if (loc.includes('SAÍDA') || loc.includes('SAIDA') || loc.includes('SAIDA')) return 'SAÍDA';
+  if (loc.includes('SAÍDA') || loc.includes('SAIDA')) return 'SAÍDA';
   if (loc.includes('TRANSFER')) return 'TRANSFERÊNCIA';
+  if (loc.includes('SEPAR') || loc.includes('EXPEDI')) return 'SEPARACAO';
   return 'ENTRADA';
 };
 
@@ -66,7 +76,32 @@ export const processarLeituraRaw = async (epc, id_leitor, rssi = null) => {
     ? inferirTipoMovimentacao(leitor.localizacao)
     : 'ENTRADA';
 
-  // 5. Registra movimentação (id_usuario = null → automático via RFID)
+  // 5. Verifica consistência de status e registra movimentação
+  const statusAtual = await buscarStatusPacote(etiqueta.id_pacote);
+  let novoStatus = statusAtual;
+
+  if (tipoMovimentacao === 'SEPARACAO') {
+    if (statusAtual !== 'EM_ESTOQUE') {
+      resultado.avisos.push(`Pacote não pode ser separado. Status atual: ${statusAtual}`);
+      return resultado; // Interrompe se não puder separar
+    }
+    novoStatus = 'SEPARADO';
+  } else if (tipoMovimentacao === 'SAÍDA') {
+    if (statusAtual !== 'EM_ESTOQUE' && statusAtual !== 'SEPARADO') {
+      resultado.avisos.push(`Pacote não pode sair. Status atual: ${statusAtual}`);
+      return resultado;
+    }
+    novoStatus = 'EXPEDIDO';
+  } else if (tipoMovimentacao === 'ENTRADA' || tipoMovimentacao === 'TRANSFERÊNCIA') {
+    novoStatus = 'EM_ESTOQUE';
+  }
+
+  // Atualiza status do pacote se mudou
+  if (novoStatus !== statusAtual) {
+    await atualizarStatusPacote(etiqueta.id_pacote, novoStatus);
+  }
+
+  // 6. Registra movimentação (id_usuario = null → automático via RFID)
   resultado.movimentacao = await registrarMovimentacao(
     tipoMovimentacao,
     etiqueta.id_pacote,
@@ -74,7 +109,7 @@ export const processarLeituraRaw = async (epc, id_leitor, rssi = null) => {
     null // id_usuario nullable — movimentação automática
   );
 
-  // 6. Verificações de alerta em paralelo (não bloqueiam o fluxo principal)
+  // 7. Verificações de alerta em paralelo (não bloqueiam o fluxo principal)
   const id_lote = etiqueta.pacote?.lote?.id_lote;
   const id_produto = etiqueta.pacote?.lote?.produto?.id_produto;
   const estoque_minimo = etiqueta.pacote?.lote?.produto?.estoque_minimo;

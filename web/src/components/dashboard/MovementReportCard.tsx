@@ -1,29 +1,20 @@
 import {
   Bar,
   BarChart,
-  Legend,
+  LabelList,
   ResponsiveContainer,
   XAxis,
   YAxis,
-  CartesianGrid,
 } from "recharts";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useDashboardContext } from "@/contexts/DashboardContext";
 import { Loader2, AlertCircle } from "lucide-react";
 
-// Mudança 4: barras mais largas, legenda com pontos coloridos, eixo Y dinâmico
-const renderLegend = () => (
-  <div className="flex items-center justify-start gap-5 mt-2 pl-1">
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="w-2.5 h-2.5 rounded-full bg-success inline-block" />
-      Entradas
-    </span>
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="w-2.5 h-2.5 rounded-full bg-primary inline-block" />
-      Saídas
-    </span>
-  </div>
-);
+// Paleta do design system: --success para entradas, --destructive para saídas
+const COR_ENTRADA = "hsl(142, 60%, 45%)";
+const COR_SAIDA   = "hsl(0, 70%, 50%)";
+const COR_LABEL   = "hsl(30, 10%, 58%)";
+const COR_EIXO    = "hsl(30, 10%, 52%)";
 
 const MovementReportCard = () => {
   const { filtros } = useDashboardContext();
@@ -33,9 +24,9 @@ const MovementReportCard = () => {
 
   const maxVal = Math.max(
     ...movimentacaoMes.flatMap((s) => [s.entradas, s.saidas]),
-    10
+    5
   );
-  const tickStep = maxVal <= 20 ? 5 : maxVal <= 60 ? 20 : maxVal <= 120 ? 20 : 25;
+  const tickStep = maxVal <= 10 ? 2 : maxVal <= 30 ? 5 : maxVal <= 60 ? 10 : 20;
   const ticks = Array.from(
     { length: Math.ceil(maxVal / tickStep) + 1 },
     (_, i) => i * tickStep
@@ -43,10 +34,33 @@ const MovementReportCard = () => {
 
   return (
     <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col">
-      <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
-        Relatório de Movimentação{" "}
-        <span className="normal-case font-normal">(Mês Atual)</span>
-      </h3>
+      {/* Cabeçalho + legenda inline */}
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+            Relatório de Fluxo
+          </p>
+          <h3 className="text-sm font-semibold text-foreground mt-0.5">
+            Movimentação — Mês Atual
+          </h3>
+        </div>
+        <div className="flex items-center gap-4 pt-0.5">
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ background: COR_ENTRADA }}
+            />
+            Entradas
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ background: COR_SAIDA }}
+            />
+            Saídas
+          </span>
+        </div>
+      </div>
 
       {isLoading && (
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -63,54 +77,66 @@ const MovementReportCard = () => {
       )}
 
       {!isLoading && !isError && (
-        <div className="flex flex-col flex-1">
+        <div className="flex-1 min-h-[180px]">
           {movimentacaoMes.length === 0 ? (
             <p className="text-sm text-muted-foreground mt-2">
-              Nenhuma movimentação no mês atual.
+              Nenhuma movimentação registrada este mês.
             </p>
           ) : (
-            <>
-              <div className="flex-1 h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={movimentacaoMes}
-                    barGap={8}
-                    barCategoryGap="25%"
-                    margin={{ top: 4, right: 4, bottom: 4, left: 0 }}
-                  >
-                    <YAxis
-                      ticks={ticks}
-                      tick={{ fill: "hsl(30, 10%, 60%)", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={32}
-                    />
-                    <XAxis
-                      dataKey="nome"
-                      tick={{ fill: "hsl(30, 10%, 60%)", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    {/* Sem borda externa */}
-                    <Bar
-                      dataKey="entradas"
-                      name="Entradas"
-                      fill="hsl(142, 60%, 45%)"
-                      radius={[4, 4, 0, 0]}
-                      barSize={36}
-                    />
-                    <Bar
-                      dataKey="saidas"
-                      name="Saídas"
-                      fill="hsl(28, 90%, 55%)"
-                      radius={[4, 4, 0, 0]}
-                      barSize={36}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              {renderLegend()}
-            </>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={movimentacaoMes}
+                barGap={4}
+                barCategoryGap="30%"
+                margin={{ top: 22, right: 8, bottom: 4, left: 0 }}
+              >
+                <YAxis
+                  ticks={ticks}
+                  tick={{ fill: COR_EIXO, fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={26}
+                />
+                <XAxis
+                  dataKey="nome"
+                  tick={{ fill: COR_EIXO, fontSize: 11, fontWeight: 500 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+
+                {/* Barras de Entradas com Data Label */}
+                <Bar
+                  dataKey="entradas"
+                  name="Entradas"
+                  fill={COR_ENTRADA}
+                  radius={[4, 4, 0, 0]}
+                  barSize={22}
+                >
+                  <LabelList
+                    dataKey="entradas"
+                    position="top"
+                    style={{ fill: COR_LABEL, fontSize: 10, fontWeight: 700 }}
+                    formatter={(v: number) => (v > 0 ? v : "")}
+                  />
+                </Bar>
+
+                {/* Barras de Saídas com Data Label */}
+                <Bar
+                  dataKey="saidas"
+                  name="Saídas"
+                  fill={COR_SAIDA}
+                  radius={[4, 4, 0, 0]}
+                  barSize={22}
+                >
+                  <LabelList
+                    dataKey="saidas"
+                    position="top"
+                    style={{ fill: COR_LABEL, fontSize: 10, fontWeight: 700 }}
+                    formatter={(v: number) => (v > 0 ? v : "")}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
       )}

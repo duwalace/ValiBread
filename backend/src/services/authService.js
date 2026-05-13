@@ -34,6 +34,7 @@ export const realizarLogin = async (email, senhaPlana) => {
     token,
     usuario: {
       id: usuario.id_usuario,
+      id_perfil: usuario.id_perfil,
       nome: usuario.nome,
       email: usuario.email,
       perfil: usuario.perfil.nome

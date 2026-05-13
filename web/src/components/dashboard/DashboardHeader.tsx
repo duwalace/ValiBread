@@ -1,19 +1,32 @@
-import { Bell, LogOut } from "lucide-react";
+import { LogOut, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { NotificationsPopover } from "./NotificationsPopover";
+import type { Alerta } from "@/hooks/useExpiryAlerts";
 
-const DashboardHeader = () => {
+interface DashboardHeaderProps {
+  alertas?: Alerta[];
+  isNotificationsOpen?: boolean;
+  setIsNotificationsOpen?: (open: boolean) => void;
+}
+
+const DashboardHeader = ({ 
+  alertas = [], 
+  isNotificationsOpen = false, 
+  setIsNotificationsOpen = () => {} 
+}: DashboardHeaderProps) => {
   const navigate = useNavigate();
+  const { user, role } = useAuth(); // Single source of truth para estado e permissão
 
-  // Lê dados do usuário salvo no localStorage durante o login
-  const usuarioRaw = localStorage.getItem("usuario");
-  const usuario = usuarioRaw ? JSON.parse(usuarioRaw) : null;
-  const nomeUsuario = usuario?.nome ?? "Usuário";
+  const nomeUsuario = user?.name ?? "Usuário";
   const iniciais = nomeUsuario
     .split(" ")
     .slice(0, 2)
     .map((p: string) => p[0]?.toUpperCase() ?? "")
     .join("");
+
+  const isAdmin = role === "Admin";
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -35,6 +48,16 @@ const DashboardHeader = () => {
 
       {/* Lado direito */}
       <div className="flex items-center gap-4">
+        
+        {/* Botão para Dashboard Admin (Só aparece se for Admin) */}
+        {isAdmin && (
+          <Link to="/admin">
+            <Button variant="outline" size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90 border-transparent mr-2">
+              <LayoutDashboard className="w-4 h-4 mr-2" />
+              Painel Admin
+            </Button>
+          </Link>
+        )}
 
         {/* Avatar + nome */}
         <div className="flex items-center gap-2">
@@ -48,12 +71,11 @@ const DashboardHeader = () => {
         </div>
 
         {/* Notificação */}
-        <div className="relative">
-          <Bell className="w-5 h-5 text-foreground" />
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-[10px] text-primary-foreground flex items-center justify-center">
-            1
-          </span>
-        </div>
+        <NotificationsPopover 
+          alertas={alertas} 
+          isOpen={isNotificationsOpen} 
+          onOpenChange={setIsNotificationsOpen} 
+        />
 
         {/* Sair */}
         <Button

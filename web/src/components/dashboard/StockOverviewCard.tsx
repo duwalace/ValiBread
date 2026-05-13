@@ -1,68 +1,48 @@
 import { Line, LineChart, ResponsiveContainer } from "recharts";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useDashboardContext } from "@/contexts/DashboardContext";
-import { Loader2, AlertCircle } from "lucide-react";
-
-/**
- * Correção 2: Gera pontos de linha com saldo acumulado real.
- *
- * Recebe movimentacaoMes (4 semanas) e constrói 7+ pontos desenhando
- * a evolução dia a dia. Quando todos os valores são iguais (ex: todos zerados),
- * Recharts desenha uma reta pois não há variação. A solução:
- *  - Usar as 4 semanas da API como pontos base
- *  - Calcular saldo acumulado progressivo (não resetar a cada semana)
- *  - Se saldo igual em todos os pontos, adicionar pequena variação sintética
- *    para mostrar uma curva ao invés de reta
- */
-const buildLineData = (
-  movimentacaoMes: { nome: string; entradas: number; saidas: number }[],
-  totalItens: number
-) => {
-  if (movimentacaoMes.length === 0) {
-    // Sem dados: curva sintética levemente crescente
-    return [0.6, 0.65, 0.7, 0.72, 0.78, 0.85, 0.92, 1.0].map((f) => ({
-      v: Math.round(Math.max(1, totalItens) * f),
-    }));
-  }
-
-  // Saldo inicial: total atual menos todas as movimentações do mês
-  // (assim o último ponto chega perto de totalItens)
-  const totalEntradas = movimentacaoMes.reduce((s, m) => s + m.entradas, 0);
-  const totalSaidas   = movimentacaoMes.reduce((s, m) => s + m.saidas, 0);
-  let saldo = Math.max(0, totalItens - totalEntradas + totalSaidas);
-
-  const pontos = movimentacaoMes.map((semana) => {
-    saldo = saldo + semana.entradas - semana.saidas;
-    return { v: Math.max(0, saldo) };
-  });
-
-  // Se todos os pontos têm o mesmo valor (reta), adiciona perturbação leve
-  const valoresUnicos = new Set(pontos.map((p) => p.v));
-  if (valoresUnicos.size === 1) {
-    const base = pontos[0].v;
-    return pontos.map((_, i) => ({
-      v: Math.max(0, base - (pontos.length - 1 - i) * 2),
-    }));
-  }
-
-  return pontos;
-};
+import { Loader2, AlertCircle, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const StockOverviewCard = () => {
   const { filtros } = useDashboardContext();
   const { data, isLoading, isError } = useDashboard(filtros);
 
-  const totalItens     = data?.visaoGeral?.totalItens     ?? 0;
-  const marcadosEntrega = data?.visaoGeral?.marcadosEntrega ?? 0;
-  const movimentacaoMes = data?.movimentacaoMes ?? [];
+  const totalItens       = data?.visaoGeral?.totalItens      ?? 0;
+  const marcadosEntrega  = data?.visaoGeral?.marcadosEntrega  ?? 0;
+  const movimentacaoMes  = data?.movimentacaoMes              ?? [];
 
-  const lineData = buildLineData(movimentacaoMes, totalItens);
+  // Sparkline: saldo líquido semanal real (entradas − saídas), sem reconstrução artificial
+  const sparkData =
+    movimentacaoMes.length > 0
+      ? movimentacaoMes.map((s) => ({ v: s.entradas - s.saidas }))
+      : [{ v: 0 }, { v: 0 }, { v: 0 }, { v: 0 }];
+
+  // Tendência mensal agregada
+  const saldoMes = movimentacaoMes.reduce(
+    (acc, s) => acc + (s.entradas - s.saidas),
+    0
+  );
+  const isPositive = saldoMes > 0;
+  const isNegative = saldoMes < 0;
+  const TrendIcon   = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+  const trendColor  = isPositive
+    ? "hsl(142, 60%, 45%)"
+    : isNegative
+    ? "hsl(0, 70%, 50%)"
+    : "hsl(30, 10%, 55%)";
+  const trendLabel  = saldoMes > 0 ? `+${saldoMes}` : `${saldoMes}`;
 
   return (
     <div className="h-full border border-border/50 shadow-sm rounded-xl p-6 bg-card flex flex-col">
-      <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-3">
-        Visão Geral do Estoque
-      </h3>
+      {/* Título */}
+      <div className="mb-4">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+          Resumo de Estoque
+        </p>
+        <h3 className="text-sm font-semibold text-foreground mt-0.5">
+          Visão Geral do Estoque
+        </h3>
+      </div>
 
       {isLoading && (
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -80,43 +60,61 @@ const StockOverviewCard = () => {
 
       {!isLoading && !isError && (
         <div className="flex items-center justify-between flex-1 gap-4">
-          {/* Métricas — lado esquerdo */}
-          <div className="flex flex-col justify-center gap-2 min-w-[110px]">
+          {/* Métricas — esquerda */}
+          <div className="flex flex-col justify-center gap-5 min-w-[110px]">
             <div>
-              <p className="text-4xl font-extrabold text-foreground leading-none">
-                {marcadosEntrega}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Marcado(s) para entrega</p>
-            </div>
-            <div className="mt-3">
-              <p className="text-4xl font-extrabold text-foreground leading-none">
+              <p className="text-4xl font-extrabold text-foreground leading-none tabular-nums">
                 {totalItens}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Total de itens</p>
+              <p className="text-[11px] text-muted-foreground mt-1">Total de itens</p>
             </div>
+
+            <div>
+              <p className="text-4xl font-extrabold text-foreground leading-none tabular-nums">
+                {marcadosEntrega}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">Para entrega</p>
+            </div>
+
+            {/* Indicador de tendência mensal */}
+            {movimentacaoMes.some((s) => s.entradas + s.saidas > 0) && (
+              <div className="flex items-center gap-1.5">
+                <TrendIcon className="w-3.5 h-3.5" style={{ color: trendColor }} />
+                <span
+                  className="text-xs font-bold tabular-nums"
+                  style={{ color: trendColor }}
+                >
+                  {trendLabel}
+                </span>
+                <span className="text-[10px] text-muted-foreground/70">no mês</span>
+              </div>
+            )}
           </div>
 
-          {/* Gráfico de linha cinza com pontos — lado direito */}
+          {/* Sparkline de saldo líquido semanal — direita */}
           <div className="flex-1 h-28">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineData} margin={{ top: 8, right: 4, bottom: 4, left: 4 }}>
+              <LineChart
+                data={sparkData}
+                margin={{ top: 8, right: 4, bottom: 4, left: 4 }}
+              >
                 <Line
                   type="monotone"
                   dataKey="v"
-                  stroke="hsl(220, 10%, 65%)"
+                  stroke="hsl(30, 10%, 50%)"
                   strokeWidth={2}
-                  dot={({ cx, cy, index }) => (
+                  dot={({ cx, cy, index }: { cx: number; cy: number; index: number }) => (
                     <circle
                       key={`dot-${index}`}
                       cx={cx}
                       cy={cy}
-                      r={4}
-                      fill="hsl(220, 10%, 42%)"
-                      stroke="hsl(220, 10%, 65%)"
+                      r={3.5}
+                      fill="hsl(30, 10%, 18%)"
+                      stroke="hsl(30, 10%, 50%)"
                       strokeWidth={1.5}
                     />
                   )}
-                  activeDot={{ r: 5, fill: "hsl(220, 10%, 80%)" }}
+                  activeDot={{ r: 5, fill: "hsl(28, 90%, 55%)" }}
                 />
               </LineChart>
             </ResponsiveContainer>

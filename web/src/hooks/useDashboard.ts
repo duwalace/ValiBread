@@ -13,6 +13,11 @@ export interface AlertaValidade {
   grupos: GrupoValidade[];
 }
 
+export interface ItensVencidos {
+  totalVencidos: number;
+  grupos: GrupoValidade[];
+}
+
 export interface MovimentacaoSemana {
   nome: string;
   entradas: number;
@@ -44,6 +49,7 @@ export interface DashboardData {
     marcadosEntrega: number;
   };
   alertaValidade: AlertaValidade;
+  itensVencidos: ItensVencidos;
   movimentacaoMes: MovimentacaoSemana[];
   inventarioAtivoFEFO: ItemInventario[];
   alertasRecentes: AlertaRecente[];

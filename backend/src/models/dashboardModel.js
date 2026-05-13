@@ -1,27 +1,30 @@
 import supabase from '../config/supabase.js';
 
 /**
- * Conta o total de pacotes no estoque (cada pacote = 1 item rastreável).
+ * Conta pacotes ativos em estoque: EM_ESTOQUE + SEPARADO.
+ * Exclui EXPEDIDO (já saíram fisicamente).
  */
 export const contarTotalPacotes = async () => {
   const { count, error } = await supabase
     .from('pacote')
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .in('status', ['EM_ESTOQUE', 'SEPARADO']);
 
-  if (error) throw new Error(`Erro ao contar pacotes: ${error.message}`);
+  if (error) throw new Error(`Erro ao contar pacotes ativos: ${error.message}`);
   return count;
 };
 
 /**
- * Conta pacotes cujo lote tem status = 'entrega'.
+ * Conta pacotes com status 'SEPARADO' — separados na expedição,
+ * aguardando saída física. Fonte do card "Para Entrega" no dashboard.
  */
 export const contarPacotesParaEntrega = async () => {
   const { count, error } = await supabase
     .from('pacote')
-    .select('*, lote!inner(status)', { count: 'exact', head: true })
-    .eq('lote.status', 'entrega');
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'SEPARADO');
 
-  if (error) throw new Error(`Erro ao contar pacotes para entrega: ${error.message}`);
+  if (error) throw new Error(`Erro ao contar pacotes separados: ${error.message}`);
   return count;
 };
 

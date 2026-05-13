@@ -48,7 +48,16 @@ const Login = () => {
         title: "Login realizado!",
         description: `Bem-vindo(a) de volta, ${data.usuario?.nome ?? "usuário"}!`,
       });
-      navigate("/");
+      
+      // Verifica se o usuário é Administrador garantindo a tipagem correta (id_perfil 1 numérico)
+      const isAdmin = Number(data.usuario?.id_perfil) === 1;
+      
+      if (isAdmin) {
+        // Usa window.location.href em vez de navigate para forçar o recarregamento do AuthContext com o novo localStorage
+        window.location.href = "/admin";
+      } else {
+        window.location.href = "/";
+      }
     } catch (error: unknown) {
       const mensagem =
         axios.isAxiosError(error) && error.response?.data?.erro

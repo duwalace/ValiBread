@@ -1,8 +1,10 @@
 import exceljs from 'exceljs';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import jwt from 'jsonwebtoken';
 import { buscarRelatorioMovimentacaoSecure } from '../models/dashboardModel.js';
 import { getTenantSupabase } from '../config/supabaseTenant.js';
+import supabase from '../config/supabase.js';
 
 const formatarDataHora = (dataStr) => {
   if (!dataStr) return "";
@@ -44,7 +46,9 @@ export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) =
       column.width = 20;
     });
 
-    return await workbook.xlsx.writeBuffer();
+    const buffer = await workbook.xlsx.writeBuffer();
+    await registrarExport(buffer, 'EXCEL', userToken, filtros.tipo || 'TODOS');
+    return buffer;
   }
 
   if (formato === 'PDF') {
@@ -77,8 +81,50 @@ export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) =
       }
     });
 
-    return Buffer.from(doc.output('arraybuffer'));
+    const buffer = Buffer.from(doc.output('arraybuffer'));
+    await registrarExport(buffer, 'PDF', userToken, filtros.tipo || 'TODOS');
+    return buffer;
   }
 
   throw new Error(`Formato ${formato} não suportado.`);
+};
+
+const registrarExport = async (buffer, formato, userToken, tipo) => {
+  try {
+    const payload = jwt.decode(userToken);
+    const id_usuario = payload?.id_usuario;
+
+    if (!id_usuario) return;
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const fileName = `Dashboard_${tipo}_${timestamp}.${formato === 'EXCEL' ? 'xlsx' : 'pdf'}`;
+    const contentType = formato === 'EXCEL' 
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      : 'application/pdf';
+
+    const { error: uploadError } = await supabase.storage
+      .from('chatbot_exports')
+      .upload(fileName, buffer, {
+        contentType,
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error('Erro ao fazer upload para o Supabase no dashboard:', uploadError);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('chatbot_exports')
+      .getPublicUrl(fileName);
+
+    await supabase.from('chatbot_export').insert([{
+      id_usuario,
+      nome_arquivo: fileName,
+      url_arquivo: urlData.publicUrl
+    }]);
+
+  } catch (error) {
+    console.error('Erro ao registrar export do dashboard:', error);
+  }
 };

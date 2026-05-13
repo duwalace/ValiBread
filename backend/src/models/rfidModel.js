@@ -146,7 +146,7 @@ export const listarMovimentacoes = async (filtros = {}) => {
 };
 
 export const registrarMovimentacao = async (tipo_movimentacao, id_pacote, id_leitor = null, id_usuario = null) => {
-  const tiposValidos = ['ENTRADA', 'SAÍDA', 'TRANSFERÊNCIA'];
+  const tiposValidos = ['ENTRADA', 'SAÍDA', 'TRANSFERÊNCIA', 'SEPARACAO'];
   if (!tiposValidos.includes(tipo_movimentacao)) {
     throw new Error(`Tipo de movimentação inválido. Use: ${tiposValidos.join(', ')}`);
   }
@@ -158,6 +158,36 @@ export const registrarMovimentacao = async (tipo_movimentacao, id_pacote, id_lei
     .single();
   if (error) throw new Error(`Erro ao registrar movimentação: ${error.message}`);
   return data;
+};
+
+/**
+ * Retorna o status atual de um pacote.
+ */
+export const buscarStatusPacote = async (id_pacote) => {
+  const { data, error } = await supabase
+    .from('pacote')
+    .select('id_pacote, status')
+    .eq('id_pacote', id_pacote)
+    .single();
+  if (error) throw new Error(`Erro ao buscar status do pacote: ${error.message}`);
+  return data?.status ?? null;
+};
+
+/**
+ * Atualiza o status de um pacote.
+ * @param {number} id_pacote
+ * @param {'EM_ESTOQUE'|'SEPARADO'|'EXPEDIDO'} novoStatus
+ */
+export const atualizarStatusPacote = async (id_pacote, novoStatus) => {
+  const statusValidos = ['EM_ESTOQUE', 'SEPARADO', 'EXPEDIDO'];
+  if (!statusValidos.includes(novoStatus)) {
+    throw new Error(`Status de pacote inválido: ${novoStatus}. Use: ${statusValidos.join(', ')}`);
+  }
+  const { error } = await supabase
+    .from('pacote')
+    .update({ status: novoStatus })
+    .eq('id_pacote', id_pacote);
+  if (error) throw new Error(`Erro ao atualizar status do pacote: ${error.message}`);
 };
 
 // ─────────────────────────────────────────────

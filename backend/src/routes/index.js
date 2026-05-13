@@ -11,6 +11,7 @@ import alertaRoutes from './alertaRoutes.js';
 import sugestaoRoutes from './sugestaoRoutes.js';
 import relatorioRoutes from './relatorioRoutes.js';
 import exportRoutes from './exportRoutes.js';
+import chatbotRoutes from './chatbotRoutes.js';
 
 const router = express.Router();
 
@@ -36,6 +37,9 @@ router.use('/relatorio', relatorioRoutes);
 
 // Exportação (PDF/Excel)
 router.use('/export', exportRoutes);
+
+// Chatbot Exports Histórico
+router.use('/chatbot', chatbotRoutes);
 
 // RFID (leitura, etiqueta, leitor, movimentação)
 router.use('/rfid', rfidRoutes);

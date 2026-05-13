@@ -1,0 +1,25 @@
+{
+  "name": "valibread",
+  "version": "1.0.0",
+  "description": "![Status do Projeto](https://img.shields.io/badge/Status-Em%20Desenvolvimento-green)\r ![Licença](https://img.shields.io/badge/License-MIT-blue)",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently -k -n \"WEB,BACKEND,CHATBOT\" -c \"cyan.bold,green.bold,magenta.bold\" \"npm run dev --prefix web\" \"npm start --prefix backend\" \"npm start --prefix chatbot\"",
+    "install:all": "npm install && npm install --prefix web && npm install --prefix backend && npm install --prefix chatbot"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/duwalace/ValiBread.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/duwalace/ValiBread/issues"
+  },
+  "homepage": "https://github.com/duwalace/ValiBread#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

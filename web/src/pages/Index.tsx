@@ -9,8 +9,15 @@ import CustomReportsCard from "@/components/dashboard/CustomReportsCard";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import { MessageCircle } from "lucide-react";
 
+import { ChatbotWindow } from "@/components/chat/ChatbotWindow";
+import { ExpiryPopup } from "@/components/dashboard/ExpiryPopup";
+import { useExpiryAlerts } from "@/hooks/useExpiryAlerts";
+
 const Index = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const { alertas, showPopup, closePopup } = useExpiryAlerts();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -22,7 +29,11 @@ const Index = () => {
   return (
     <DashboardProvider>
       <div className="min-h-screen bg-background text-foreground">
-        <DashboardHeader />
+        <DashboardHeader 
+          alertas={alertas} 
+          isNotificationsOpen={isNotificationsOpen}
+          setIsNotificationsOpen={setIsNotificationsOpen}
+        />
         <FiltersSection />
 
         {/* Bento Grid Layout - Foco no FEFO e fluxo orgânico */}
@@ -77,10 +88,20 @@ const Index = () => {
       <button
         id="btn-chat-fab"
         aria-label="Abrir assistente de chat"
+        onClick={() => setIsChatOpen(!isChatOpen)}
         className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary shadow-xl flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all duration-150 cursor-pointer"
       >
         <MessageCircle className="w-7 h-7 text-primary-foreground" />
       </button>
+
+      <ChatbotWindow isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+
+      <ExpiryPopup 
+        isOpen={showPopup} 
+        onClose={closePopup} 
+        alertas={alertas} 
+        onOpenNotifications={() => setIsNotificationsOpen(true)}
+      />
     </DashboardProvider>
 
 
