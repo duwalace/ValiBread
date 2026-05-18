@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Loader2, RefreshCw, Filter, X, Search } from "lucide-react";
+import { Plus, Trash2, Loader2, RefreshCw, Filter, X, Search, ArrowRightLeft, TrendingUp, TrendingDown, History } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { RoleBasedRender } from "@/components/RoleBasedRender";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,9 @@ import {
   createPacote,
   deletePacote,
   updatePacoteStatus,
+  fetchMovimentacoes,
+  type Movimentacao,
+  type TipoMovimentacao,
   type Pacote,
   type PacoteStatus,
 } from "@/lib/adminService";
@@ -45,6 +48,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Mapeamento de status do banco → rótulo legível + cor
 const STATUS_CONFIG: Record<PacoteStatus, { label: string; color: string }> = {
@@ -95,6 +99,21 @@ export function InventoryPage() {
   const { data: produtos } = useQuery({
     queryKey: ['produtos'],
     queryFn: fetchProdutos,
+  });
+
+  // Estados para filtros do histórico de movimentações
+  const [histTipo, setHistTipo] = useState<string>("ALL");
+  const [histDataInicio, setHistDataInicio] = useState("");
+  const [histDataFim, setHistDataFim] = useState("");
+
+  const { data: movimentacoes, isLoading: isLoadingMovs, refetch: refetchMovs } = useQuery({
+    queryKey: ['movimentacoes', histTipo, histDataInicio, histDataFim],
+    queryFn: () => fetchMovimentacoes({
+      tipo: histTipo !== "ALL" ? histTipo as TipoMovimentacao : undefined,
+      data_inicio: histDataInicio || undefined,
+      data_fim: histDataFim || undefined,
+    }),
+    staleTime: 0,
   });
 
   // Mutação: atualiza pacote.status via PATCH /api/pacote/:id/status
@@ -194,9 +213,10 @@ export function InventoryPage() {
         }
       }
       
-      // Filtro de Produto
-      if (filterProduto !== "ALL" && item.lote?.id_produto.toString() !== filterProduto) {
-        return false;
+      // Filtro de Produto — compara pelo nome do produto (que é o que o select usa como valor)
+      if (filterProduto !== "ALL") {
+        const nomeProdutoFiltrado = produtos?.find(p => p.id_produto.toString() === filterProduto)?.nome;
+        if (item.lote?.produto?.nome !== nomeProdutoFiltrado) return false;
       }
 
       // Filtro de Status
@@ -232,13 +252,28 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Gestão de Estoque</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Gerencie os pacotes do inventário e acompanhe o status de entrega.
-          </p>
-        </div>
+      {/* Header fixo acima das abas */}
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">Gestão de Estoque</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Gerencie os pacotes do inventário e acompanhe o histórico de movimentações.
+        </p>
+      </div>
+
+      <Tabs defaultValue="estoque" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="estoque" className="gap-2">
+            <ArrowRightLeft className="w-4 h-4" />
+            Estoque
+          </TabsTrigger>
+          <TabsTrigger value="historico" className="gap-2">
+            <History className="w-4 h-4" />
+            Histórico
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="estoque">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 
         <div className="flex items-center gap-2 flex-wrap">
           
@@ -559,6 +594,110 @@ export function InventoryPage() {
           </div>
         )}
       </div>
+      </TabsContent>
+
+      {/* ── ABA: HISTÓRICO DE MOVIMENTAÇÕES ───────────────────────────── */}
+      <TabsContent value="historico">
+        <div className="space-y-4">
+          {/* Filtros */}
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Tipo</label>
+              <Select value={histTipo} onValueChange={setHistTipo}>
+                <SelectTrigger className="h-9 w-[160px] text-sm">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos</SelectItem>
+                  <SelectItem value="Entrada">Entrada</SelectItem>
+                  <SelectItem value="Saída">Saída</SelectItem>
+                  <SelectItem value="Transferência">Transferência</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Data Início</label>
+              <Input type="date" className="h-9 w-[160px]" value={histDataInicio} onChange={(e) => setHistDataInicio(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Data Fim</label>
+              <Input type="date" className="h-9 w-[160px]" value={histDataFim} onChange={(e) => setHistDataFim(e.target.value)} />
+            </div>
+            <Button variant="outline" size="sm" className="h-9 gap-2" onClick={() => refetchMovs()} disabled={isLoadingMovs}>
+              <RefreshCw className={`w-4 h-4 ${isLoadingMovs ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
+            {(histTipo !== "ALL" || histDataInicio || histDataFim) && (
+              <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={() => { setHistTipo("ALL"); setHistDataInicio(""); setHistDataFim(""); }}>
+                <X className="w-3.5 h-3.5 mr-1" />Limpar filtros
+              </Button>
+            )}
+          </div>
+
+          {/* Tabela de Movimentações */}
+          <div className="border border-border rounded-lg bg-card overflow-hidden">
+            <Table>
+              <TableHeader className="bg-secondary/50">
+                <TableRow className="border-border">
+                  <TableHead className="font-medium">Tipo</TableHead>
+                  <TableHead className="font-medium">Pacote</TableHead>
+                  <TableHead className="font-medium">Produto / Lote</TableHead>
+                  <TableHead className="font-medium">Data / Hora</TableHead>
+                  <TableHead className="font-medium">Usuário</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoadingMovs ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
+                    </TableCell>
+                  </TableRow>
+                ) : !movimentacoes || movimentacoes.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      Nenhuma movimentação encontrada para os filtros selecionados.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  movimentacoes.map((mov) => {
+                    const tipo = mov.tipo_movimentacao;
+                    const tipoColor = tipo === 'Entrada' ? 'text-emerald-500' : tipo === 'Saída' ? 'text-rose-500' : 'text-sky-500';
+                    const TipoIcon = tipo === 'Entrada' ? TrendingUp : tipo === 'Saída' ? TrendingDown : ArrowRightLeft;
+                    return (
+                      <TableRow key={mov.id_movimentacao} className="border-border hover:bg-secondary/30 transition-colors">
+                        <TableCell>
+                          <span className={`flex items-center gap-1.5 font-medium text-sm ${tipoColor}`}>
+                            <TipoIcon className="w-3.5 h-3.5" />
+                            {tipo}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">#{mov.id_pacote}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{mov.pacote?.lote?.produto?.nome ?? '—'}</span>
+                            <span className="text-xs text-muted-foreground">{mov.pacote?.lote?.codigo_lote ?? ''}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {new Date(mov.data_hora).toLocaleString('pt-BR')}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-sm">{mov.usuario?.nome ?? <span className="italic text-muted-foreground/50">Sistema</span>}</span>
+                            {mov.usuario?.email && <span className="text-xs text-muted-foreground">{mov.usuario.email}</span>}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      </TabsContent>
+      </Tabs>
     </div>
   );
 }

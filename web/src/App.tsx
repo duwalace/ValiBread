@@ -17,6 +17,7 @@ import { DashboardPage } from "./pages/admin/DashboardPage";
 import { InventoryPage } from "./pages/admin/InventoryPage";
 import { UsersPage } from "./pages/admin/UsersPage";
 import { DocumentosPage } from "./pages/admin/DocumentosPage";
+import { SettingsPage } from "./pages/admin/SettingsPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="estoque" element={<InventoryPage />} />
               <Route path="usuarios" element={<UsersPage />} />
               <Route path="documentos" element={<DocumentosPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
 
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

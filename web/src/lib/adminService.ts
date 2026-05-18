@@ -62,6 +62,26 @@ export interface Usuario {
   id_perfil: number;
 }
 
+export type TipoMovimentacao = 'Entrada' | 'Saída' | 'Transferência';
+
+export interface Movimentacao {
+  id_movimentacao: number;
+  tipo_movimentacao: TipoMovimentacao;
+  data_hora: string;
+  id_pacote: number;
+  id_usuario: number | null;
+  pacote?: {
+    id_pacote: number;
+    status: PacoteStatus;
+    lote?: {
+      codigo_lote: string;
+      produto?: { nome: string };
+    };
+  };
+  usuario?: { nome: string; email: string } | null;
+  leitor_rfid?: { codigo_equipamento: string; localizacao: string } | null;
+}
+
 // --- Dashboard Services ---
 export const fetchDashboardData = async (): Promise<DashboardData> => {
   const response = await api.get('/api/dashboard');
@@ -132,4 +152,42 @@ export const updateUsuario = async ({ id, dados }: { id: number; dados: any }): 
 
 export const deleteUsuario = async (id: number): Promise<void> => {
   await api.delete(`/api/usuario/${id}`);
+};
+
+export const changePassword = async ({ id, senhaAtual, novaSenha }: { id: number; senhaAtual: string; novaSenha: string }): Promise<void> => {
+  await api.put(`/api/usuario/${id}/senha`, { senhaAtual, novaSenha });
+};
+
+// --- Movimentação Services ---
+export interface MovimentacaoFiltros {
+  tipo?: TipoMovimentacao;
+  data_inicio?: string;
+  data_fim?: string;
+  id_produto?: number;
+  id_pacote?: number;
+}
+
+export const fetchMovimentacoes = async (filtros: MovimentacaoFiltros = {}): Promise<Movimentacao[]> => {
+  const params = new URLSearchParams();
+  if (filtros.tipo) params.append('tipo', filtros.tipo);
+  if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio);
+  if (filtros.data_fim) params.append('data_fim', filtros.data_fim);
+  if (filtros.id_produto) params.append('id_produto', String(filtros.id_produto));
+  if (filtros.id_pacote) params.append('id_pacote', String(filtros.id_pacote));
+  const response = await api.get(`/api/movimentacao?${params.toString()}`);
+  return response.data;
+};
+
+export const fetchMovimentacoesPorPacote = async (id_pacote: number): Promise<Movimentacao[]> => {
+  const response = await api.get(`/api/movimentacao/${id_pacote}`);
+  return response.data;
+};
+
+export const registrarMovimentacao = async (dados: {
+  id_pacote: number;
+  tipo_movimentacao: TipoMovimentacao;
+  observacao?: string;
+}): Promise<Movimentacao> => {
+  const response = await api.post('/api/movimentacao', dados);
+  return response.data;
 };

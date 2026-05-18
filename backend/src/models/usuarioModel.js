@@ -45,6 +45,16 @@ export const buscarUsuarioPorId = async (id) => {
   return data;
 };
 
+export const buscarSenhaUsuarioPorId = async (id) => {
+  const { data, error } = await supabase
+    .from('usuario')
+    .select('senha')
+    .eq('id_usuario', id)
+    .single();
+  if (error && error.code !== 'PGRST116') throw new Error(`Erro ao buscar senha: ${error.message}`);
+  return data;
+};
+
 export const atualizarUsuario = async (id, dados) => {
   // Nunca retornar a senha em atualizações de perfil
   const { data, error } = await supabase

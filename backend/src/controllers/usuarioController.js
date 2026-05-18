@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { listarUsuarios, buscarUsuarioPorId, atualizarUsuario, deletarUsuario, buscarUsuarioPorEmail, inserirUsuario } from '../models/usuarioModel.js';
+import { listarUsuarios, buscarUsuarioPorId, buscarSenhaUsuarioPorId, atualizarUsuario, deletarUsuario, buscarUsuarioPorEmail, inserirUsuario } from '../models/usuarioModel.js';
 
 export const listar = async (req, res) => {
   try {
@@ -58,6 +58,40 @@ export const deletar = async (req, res) => {
   try {
     await deletarUsuario(req.params.id);
     return res.status(204).send();
+  } catch (error) {
+    return res.status(400).json({ erro: error.message });
+  }
+};
+
+export const alterarSenha = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { senhaAtual, novaSenha } = req.body;
+    
+    // Validar se o usuário que faz a requisição é ele mesmo
+    // req.usuario.id_usuario vem do middleware
+    if (Number(id) !== Number(req.usuario.id_usuario)) {
+      return res.status(403).json({ erro: 'Você só pode alterar sua própria senha.' });
+    }
+
+    if (!senhaAtual || !novaSenha) {
+      return res.status(400).json({ erro: 'A senha atual e a nova senha são obrigatórias.' });
+    }
+
+    const authData = await buscarSenhaUsuarioPorId(id);
+    if (!authData) {
+      return res.status(404).json({ erro: 'Usuário não encontrado.' });
+    }
+
+    const senhaCorreta = await bcrypt.compare(senhaAtual, authData.senha);
+    if (!senhaCorreta) {
+      return res.status(401).json({ erro: 'A senha atual está incorreta.' });
+    }
+
+    const novaSenhaCriptografada = await bcrypt.hash(novaSenha, 10);
+    await atualizarUsuario(id, { senha: novaSenhaCriptografada });
+
+    return res.status(200).json({ mensagem: 'Senha alterada com sucesso.' });
   } catch (error) {
     return res.status(400).json({ erro: error.message });
   }

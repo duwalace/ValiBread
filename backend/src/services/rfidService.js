@@ -10,27 +10,36 @@ import {
 import { verificarEstoqueMinimo, verificarValidadeLote, verificarEtiquetaInativa } from './alertaService.js';
 
 /**
- * Inferência do tipo de movimentação baseada na localização do leitor.
- * Assume palavras-chave no campo `localizacao`:
- *   - Contém "SAÍDA" ou "SAIDA" → SAÍDA
- *   - Contém "TRANSFER" → TRANSFERÊNCIA
- *   - Contém "SEPAR" ou "EXPEDI" → SEPARACAO
- *   - Qualquer outro → ENTRADA
+ * Resolve o tipo de movimentação a partir do campo `tipo_operacao` do leitor.
+ * Fallback: se o campo não existir (leitor antigo), infere pela localização.
+ *
+ * tipos aceitos pela movimentacao_estoque:
+ *   'Entrada' | 'Saída' | 'Transferência'
+ *
+ * Há também 'SEPARACAO' como estado intermediário do pacote (não é tipo de movimentacao).
  */
-const inferirTipoMovimentacao = (localizacao = '') => {
-  const loc = localizacao.toUpperCase();
-  if (loc.includes('SAÍDA') || loc.includes('SAIDA')) return 'SAÍDA';
-  if (loc.includes('TRANSFER')) return 'TRANSFERÊNCIA';
-  if (loc.includes('SEPAR') || loc.includes('EXPEDI')) return 'SEPARACAO';
-  return 'ENTRADA';
+const resolverTipoMovimentacao = (leitor) => {
+  if (!leitor) return 'Entrada';
+
+  // Usa tipo_operacao se o campo existir na linha do banco
+  if (leitor.tipo_operacao) {
+    return leitor.tipo_operacao; // 'Entrada' | 'Saída' | 'Transferência'
+  }
+
+  // Fallback legado: inferência por localização (campo de texto livre)
+  const loc = (leitor.localizacao || '').toUpperCase();
+  if (loc.includes('SAÍDA') || loc.includes('SAIDA')) return 'Saída';
+  if (loc.includes('TRANSFER')) return 'Transferência';
+  return 'Entrada';
 };
 
 /**
  * Processa uma leitura RFID recebida do hardware:
  * 1. Grava em leitura_rfid_raw
  * 2. Busca rfid_etiqueta pelo epc
- * 3. Registra movimentacao_estoque (id_usuario = null — automático)
- * 4. Dispara verificações de alerta
+ * 3. Registra movimentacao_estoque com tipo definido pelo campo tipo_operacao do leitor
+ * 4. Atualiza status do pacote conforme o tipo de movimentação
+ * 5. Dispara verificações de alerta
  *
  * @param {string} epc - Código EPC da etiqueta RFID
  * @param {number} id_leitor - ID do leitor que captou a leitura
@@ -60,7 +69,6 @@ export const processarLeituraRaw = async (epc, id_leitor, rssi = null) => {
   // 3. Verifica se a etiqueta está ativa
   if (etiqueta.status !== 'ATIVO') {
     resultado.avisos.push(`Etiqueta EPC ${epc} está com status "${etiqueta.status}".`);
-    // Ainda gera alerta mas não registra movimentação
     try {
       const alertaEtiqueta = await verificarEtiquetaInativa(etiqueta);
       if (alertaEtiqueta) resultado.alertas.push(alertaEtiqueta);
@@ -70,29 +78,21 @@ export const processarLeituraRaw = async (epc, id_leitor, rssi = null) => {
     return resultado;
   }
 
-  // 4. Busca leitor para inferir tipo de movimentação
+  // 4. Resolve tipo de movimentação pelo campo tipo_operacao do leitor
   const leitor = await buscarLeitorPorId(id_leitor);
-  const tipoMovimentacao = leitor
-    ? inferirTipoMovimentacao(leitor.localizacao)
-    : 'ENTRADA';
+  const tipoMovimentacao = resolverTipoMovimentacao(leitor);
 
-  // 5. Verifica consistência de status e registra movimentação
+  // 5. Mapeia tipo de movimentação para novo status do pacote
   const statusAtual = await buscarStatusPacote(etiqueta.id_pacote);
   let novoStatus = statusAtual;
 
-  if (tipoMovimentacao === 'SEPARACAO') {
-    if (statusAtual !== 'EM_ESTOQUE') {
-      resultado.avisos.push(`Pacote não pode ser separado. Status atual: ${statusAtual}`);
-      return resultado; // Interrompe se não puder separar
-    }
-    novoStatus = 'SEPARADO';
-  } else if (tipoMovimentacao === 'SAÍDA') {
+  if (tipoMovimentacao === 'Saída') {
     if (statusAtual !== 'EM_ESTOQUE' && statusAtual !== 'SEPARADO') {
       resultado.avisos.push(`Pacote não pode sair. Status atual: ${statusAtual}`);
       return resultado;
     }
     novoStatus = 'EXPEDIDO';
-  } else if (tipoMovimentacao === 'ENTRADA' || tipoMovimentacao === 'TRANSFERÊNCIA') {
+  } else if (tipoMovimentacao === 'Entrada' || tipoMovimentacao === 'Transferência') {
     novoStatus = 'EM_ESTOQUE';
   }
 

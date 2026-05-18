@@ -73,8 +73,12 @@ export function AdminLayout() {
 
         <div className="p-4 border-t border-border">
           <Link
-            to="#"
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+            to="/admin/settings"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              isActive("/admin/settings")
+                ? "bg-secondary text-secondary-foreground font-medium"
+                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            }`}
           >
             <Settings className="w-4 h-4" />
             Configurações

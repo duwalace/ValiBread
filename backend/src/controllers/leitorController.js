@@ -23,14 +23,23 @@ export const buscar = async (req, res) => {
 
 export const criar = async (req, res) => {
   try {
-    const { codigo_equipamento, localizacao, status } = req.body;
+    const { codigo_equipamento, localizacao, status, tipo_operacao } = req.body;
     if (!codigo_equipamento || !localizacao) {
       return res.status(400).json({ erro: 'codigo_equipamento e localizacao são obrigatórios.' });
     }
     if (status && !STATUS_VALIDOS.includes(status)) {
       return res.status(400).json({ erro: `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}` });
     }
-    const data = await criarLeitor({ codigo_equipamento, localizacao, status: status || 'ATIVO' });
+    const TIPOS_OPERACAO_VALIDOS = ['Entrada', 'Saída', 'Transferência'];
+    if (tipo_operacao && !TIPOS_OPERACAO_VALIDOS.includes(tipo_operacao)) {
+      return res.status(400).json({ erro: `tipo_operacao inválido. Use: ${TIPOS_OPERACAO_VALIDOS.join(', ')}` });
+    }
+    const data = await criarLeitor({
+      codigo_equipamento,
+      localizacao,
+      status: status || 'ATIVO',
+      tipo_operacao: tipo_operacao || 'Entrada',
+    });
     return res.status(201).json(data);
   } catch (error) {
     return res.status(400).json({ erro: error.message });
@@ -39,14 +48,19 @@ export const criar = async (req, res) => {
 
 export const atualizar = async (req, res) => {
   try {
-    const { codigo_equipamento, localizacao, status } = req.body;
+    const { codigo_equipamento, localizacao, status, tipo_operacao } = req.body;
     if (status && !STATUS_VALIDOS.includes(status)) {
       return res.status(400).json({ erro: `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}` });
+    }
+    const TIPOS_OPERACAO_VALIDOS = ['Entrada', 'Saída', 'Transferência'];
+    if (tipo_operacao && !TIPOS_OPERACAO_VALIDOS.includes(tipo_operacao)) {
+      return res.status(400).json({ erro: `tipo_operacao inválido. Use: ${TIPOS_OPERACAO_VALIDOS.join(', ')}` });
     }
     const dados = {};
     if (codigo_equipamento !== undefined) dados.codigo_equipamento = codigo_equipamento;
     if (localizacao !== undefined) dados.localizacao = localizacao;
     if (status !== undefined) dados.status = status;
+    if (tipo_operacao !== undefined) dados.tipo_operacao = tipo_operacao;
     const data = await atualizarLeitor(req.params.id, dados);
     return res.status(200).json(data);
   } catch (error) {

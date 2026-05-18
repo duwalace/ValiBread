@@ -12,6 +12,7 @@ import sugestaoRoutes from './sugestaoRoutes.js';
 import relatorioRoutes from './relatorioRoutes.js';
 import exportRoutes from './exportRoutes.js';
 import chatbotRoutes from './chatbotRoutes.js';
+import movimentacaoRoutes from './movimentacaoRoutes.js';
 
 const router = express.Router();
 
@@ -40,6 +41,9 @@ router.use('/export', exportRoutes);
 
 // Chatbot Exports Histórico
 router.use('/chatbot', chatbotRoutes);
+
+// Movimentações de Estoque
+router.use('/movimentacao', movimentacaoRoutes);
 
 // RFID (leitura, etiqueta, leitor, movimentação)
 router.use('/rfid', rfidRoutes);
