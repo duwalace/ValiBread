@@ -184,11 +184,12 @@ export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, tenantSupa
   }
 
   if (filtros.dataInicio) {
-    query = query.gte('data_hora', `${filtros.dataInicio}T00:00:00.000Z`);
+    // Offset -03:00: corte do dia no horário de Brasília, não em UTC puro
+    query = query.gte('data_hora', `${filtros.dataInicio}T00:00:00-03:00`);
   }
 
   if (filtros.dataFim) {
-    query = query.lte('data_hora', `${filtros.dataFim}T23:59:59.999Z`);
+    query = query.lte('data_hora', `${filtros.dataFim}T23:59:59-03:00`);
   }
 
   const { data, error } = await query;

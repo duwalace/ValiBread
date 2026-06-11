@@ -38,10 +38,12 @@ export const listarMovimentacoes = async (filtros = {}) => {
     query = query.eq('tipo_movimentacao', filtros.tipo);
   }
   if (filtros.data_inicio) {
-    query = query.gte('data_hora', `${filtros.data_inicio}T00:00:00`);
+    // Offset -03:00 (Brasília): início do dia local = T00:00:00-03:00
+    query = query.gte('data_hora', `${filtros.data_inicio}T00:00:00-03:00`);
   }
   if (filtros.data_fim) {
-    query = query.lte('data_hora', `${filtros.data_fim}T23:59:59`);
+    // Fim do dia local incluindo todos os segundos = T23:59:59-03:00
+    query = query.lte('data_hora', `${filtros.data_fim}T23:59:59-03:00`);
   }
   if (filtros.id_pacote) {
     query = query.eq('id_pacote', Number(filtros.id_pacote));

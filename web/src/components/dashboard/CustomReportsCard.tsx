@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   FileDown,
   FileSpreadsheet,
-  Calendar,
   Loader2,
   AlertCircle,
   CheckCircle2,
@@ -41,22 +40,6 @@ interface PreviewData {
   resumo: Record<string, number>;
   movimentacoes: Movimentacao[];
 }
-
-// ── Helpers ────────────────────────────────────────────────────────
-
-/** Converte "DD/MM/AAAA" → "AAAA-MM-DD" para a API */
-const brParaIso = (v: string): string => {
-  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
-};
-
-/** Valida formato DD/MM/AAAA e data real */
-const validarData = (v: string): boolean => {
-  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!m) return false;
-  const d = new Date(`${m[3]}-${m[2]}-${m[1]}`);
-  return !isNaN(d.getTime());
-};
 
 const formatarDataHora = (iso: string): string => {
   try {
@@ -104,17 +87,8 @@ const CustomReportsCard = () => {
       setErroData("Preencha as duas datas do período.");
       return false;
     }
-    if (!validarData(dataInicio)) {
-      setErroData("Data Início inválida. Use DD/MM/AAAA.");
-      return false;
-    }
-    if (!validarData(dataFim)) {
-      setErroData("Data Fim inválida. Use DD/MM/AAAA.");
-      return false;
-    }
-    const isoInicio = brParaIso(dataInicio);
-    const isoFim    = brParaIso(dataFim);
-    if (isoFim < isoInicio) {
+    // Compara como objetos Date reais — sem risco de comparação de string
+    if (new Date(dataFim) < new Date(dataInicio)) {
       setErroData("Data Fim não pode ser anterior à Data Início.");
       return false;
     }
@@ -131,8 +105,8 @@ const CustomReportsCard = () => {
     setCarregando(true);
     try {
       const params: Record<string, string> = {
-        dataInicio: brParaIso(dataInicio),
-        dataFim:    brParaIso(dataFim),
+        dataInicio: dataInicio,   // já em YYYY-MM-DD (valor nativo do input type=date)
+        dataFim:    dataFim,
       };
       if (tipo !== "TODOS") params.tipo = tipo;
 
@@ -160,8 +134,8 @@ const CustomReportsCard = () => {
 
       const params: Record<string, string> = {
         formato,
-        dataInicio: brParaIso(dataInicio),
-        dataFim: brParaIso(dataFim),
+        dataInicio: dataInicio,   // já em YYYY-MM-DD
+        dataFim: dataFim,
       };
       if (tipo !== "TODOS") params.tipo = tipo;
 
@@ -231,17 +205,13 @@ const CustomReportsCard = () => {
             <label htmlFor="relatorio-data-inicio" className="text-[10px] text-muted-foreground mb-1 block pl-0.5">
               Data Início
             </label>
-            <div className="relative">
-              <Input
-                id="relatorio-data-inicio"
-                placeholder="DD/MM/AAAA"
-                value={dataInicio}
-                onChange={(e) => { setDataInicio(e.target.value); setErroData(null); setPreview(null); }}
-                maxLength={10}
-                className={inputCls}
-              />
-              <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            </div>
+            <Input
+              id="relatorio-data-inicio"
+              type="date"
+              value={dataInicio}
+              onChange={(e) => { setDataInicio(e.target.value); setErroData(null); setPreview(null); }}
+              className={inputCls + " dark:[&::-webkit-calendar-picker-indicator]:invert dark:[&::-webkit-calendar-picker-indicator]:opacity-70"}
+            />
           </div>
 
           {/* Data Fim */}
@@ -249,17 +219,13 @@ const CustomReportsCard = () => {
             <label htmlFor="relatorio-data-fim" className="text-[10px] text-muted-foreground mb-1 block pl-0.5">
               Data Fim
             </label>
-            <div className="relative">
-              <Input
-                id="relatorio-data-fim"
-                placeholder="DD/MM/AAAA"
-                value={dataFim}
-                onChange={(e) => { setDataFim(e.target.value); setErroData(null); setPreview(null); }}
-                maxLength={10}
-                className={inputCls}
-              />
-              <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            </div>
+            <Input
+              id="relatorio-data-fim"
+              type="date"
+              value={dataFim}
+              onChange={(e) => { setDataFim(e.target.value); setErroData(null); setPreview(null); }}
+              className={inputCls + " dark:[&::-webkit-calendar-picker-indicator]:invert dark:[&::-webkit-calendar-picker-indicator]:opacity-70"}
+            />
           </div>
         </div>
 
@@ -307,9 +273,13 @@ const CustomReportsCard = () => {
             </div>
             <p className="text-muted-foreground">
               Período:{" "}
-              <span className="text-foreground">{dataInicio}</span>
+              <span className="text-foreground">
+                {dataInicio ? new Date(dataInicio + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
+              </span>
               {" → "}
-              <span className="text-foreground">{dataFim}</span>
+              <span className="text-foreground">
+                {dataFim ? new Date(dataFim + "T12:00:00").toLocaleDateString("pt-BR") : "—"}
+              </span>
             </p>
           </div>
 

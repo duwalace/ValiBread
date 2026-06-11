@@ -55,8 +55,9 @@ export const previsualizar = async (req, res) => {
         ),
         leitor_rfid ( codigo_equipamento, localizacao )
       `)
-      .gte('data_hora', `${dataInicio}T00:00:00`)
-      .lte('data_hora', `${dataFim}T23:59:59`)
+      // Offset -03:00 (Brasília): garante que o corte do dia seja no horário local e não em UTC
+      .gte('data_hora', `${dataInicio}T00:00:00-03:00`)
+      .lte('data_hora', `${dataFim}T23:59:59-03:00`)
       .order('data_hora', { ascending: false })
       .limit(100);
 

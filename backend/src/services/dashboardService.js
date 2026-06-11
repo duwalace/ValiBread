@@ -139,9 +139,10 @@ export const obterDadosDashboard = async (filtros) => {
   movimentacoesMes.forEach(mov => {
     const dia = new Date(mov.data_hora).getDate();
     const semana = `Sem ${Math.min(Math.ceil(dia / 7), 4)}`;
-    const tipo = (mov.tipo_movimentacao || '').toUpperCase();
-    if (tipo === 'ENTRADA')                   movimentacaoPorSemana[semana].entradas++;
-    else if (tipo === 'SAÍDA' || tipo === 'SAIDA') movimentacaoPorSemana[semana].saidas++;
+    // Comparação case-insensitive: banco grava 'Entrada'/'Saída'/'Transferência'
+    const tipo = (mov.tipo_movimentacao || '').toLowerCase();
+    if (tipo === 'entrada')                       movimentacaoPorSemana[semana].entradas++;
+    else if (tipo === 'saída' || tipo === 'saida') movimentacaoPorSemana[semana].saidas++;
   });
 
   const movimentacaoMes = Object.keys(movimentacaoPorSemana).map(chave => ({

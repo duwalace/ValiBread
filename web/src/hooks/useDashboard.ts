@@ -77,8 +77,9 @@ export const useDashboard = (filtros: FiltrosDashboard = {}) => {
       const { data } = await api.get('/api/dashboard', { params });
       return data;
     },
-    staleTime: 30_000, // 30s antes de revalidar
-    refetchInterval: 60_000, // atualiza a cada 1min
+    staleTime: 0,             // dado nunca é considerado "fresco" — sempre refetch ao navegar
+    refetchOnMount: 'always', // força refetch toda vez que o componente monta (volta ao Dashboard)
+    refetchInterval: 60_000,  // polling de segurança a cada 1min (ex: outro usuário faz mudanças)
     retry: 2,
   });
 };

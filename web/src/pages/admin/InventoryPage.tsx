@@ -63,7 +63,7 @@ export function InventoryPage() {
   const { role } = useAuth();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [novoLote, setNovoLote] = useState({ codigo_lote: "", id_produto: "", data_validade: "" });
+  const [novoLote, setNovoLote] = useState({ codigo_lote: "", id_produto: "", data_fabricacao: "", data_validade: "" });
   const [currentPage, setCurrentPage] = useState(1);
   // Mapa de status local para feedback otimista imediato por linha
   const [localStatus, setLocalStatus] = useState<Record<number, PacoteStatus>>({});
@@ -120,7 +120,7 @@ export function InventoryPage() {
   const updateStatusMutation = useMutation({
     mutationFn: updatePacoteStatus,
     onSuccess: (updatedPacote) => {
-      // Atualiza o cache cirurgicamente sem re-fetch
+      // Atualiza o cache de pacotes cirurgicamente sem re-fetch
       queryClient.setQueryData(['pacotes'], (old: Pacote[] | undefined) =>
         old
           ? old.map((p) => (p.id_pacote === updatedPacote.id_pacote ? updatedPacote : p))
@@ -132,6 +132,12 @@ export function InventoryPage() {
         delete next[updatedPacote.id_pacote];
         return next;
       });
+      // Aguarda 300ms para o banco confirmar o registro de movimentação
+      // antes de disparar o refetch — evita race condition em cliques rápidos
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['movimentacoes'] });
+      }, 300);
       toast.success("Status atualizado com sucesso!");
     },
     onError: (err: any, variables) => {
@@ -165,7 +171,7 @@ export function InventoryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pacotes'] });
       setIsDialogOpen(false);
-      setNovoLote({ codigo_lote: "", id_produto: "", data_validade: "" });
+      setNovoLote({ codigo_lote: "", id_produto: "", data_fabricacao: "", data_validade: "" });
       toast.success("Novo lote criado com sucesso");
     },
     onError: (err: any) => toast.error(err.response?.data?.erro || "Erro ao criar novo lote"),
@@ -192,6 +198,7 @@ export function InventoryPage() {
     createMutation.mutate({
       codigo_lote: novoLote.codigo_lote,
       id_produto: Number(novoLote.id_produto),
+      data_fabricacao: novoLote.data_fabricacao ? novoLote.data_fabricacao : undefined,
       data_validade: novoLote.data_validade ? novoLote.data_validade : undefined,
     });
   };
@@ -429,6 +436,16 @@ export function InventoryPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="data_fabricacao">Data de Fabricação (Opcional)</Label>
+                    <Input
+                      id="data_fabricacao"
+                      type="date"
+                      value={novoLote.data_fabricacao}
+                      onChange={(e) => setNovoLote({ ...novoLote, data_fabricacao: e.target.value })}
+                      className="bg-input border-border dark:[&::-webkit-calendar-picker-indicator]:invert dark:[&::-webkit-calendar-picker-indicator]:opacity-70"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="data_validade">Data de Validade (Opcional)</Label>
