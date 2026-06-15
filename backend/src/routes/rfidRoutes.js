@@ -1,5 +1,5 @@
 import express from 'express';
-import { registrarLeituraEsp32, listarHistoricoLeituras } from '../controllers/rfidController.js';
+import { registrarLeituraEsp32, listarHistoricoLeituras, scanRfid, cadastrarEtiqueta } from '../controllers/rfidController.js';
 import { listar as listarEtiquetas, associar, atualizarStatus } from '../controllers/etiquetaController.js';
 import { listar as listarLeitores, buscar as buscarLeitor, criar as criarLeitor, atualizar as atualizarLeitor, atualizarStatusLeitor } from '../controllers/leitorController.js';
 import { listar as listarMovimentacoes, registrar as registrarMovimentacao } from '../controllers/movimentacaoController.js';
@@ -8,11 +8,18 @@ import { validarApiKeyRfid } from '../middlewares/rfidApiKeyMiddleware.js';
 
 const rfidRoutes = express.Router();
 
-// ── Leitura bruta (hardware — sem JWT) ──────────────────────────
-// C-03: Endpoint do hardware protegido por API Key estática (header X-Api-Key)
-// O ESP32 NÃO usa JWT — usa RFID_API_KEY definida no .env
+// ── Leitura bruta de movimentação (hardware — sem JWT) ───────────
+// Usado pelo ESP32 quando a tag JÁ ESTÁ CADASTRADA e se quer registrar entrada/saída
 rfidRoutes.post('/leitura', validarApiKeyRfid, registrarLeituraEsp32);
 rfidRoutes.get('/historico', autenticar, listarHistoricoLeituras);
+
+// ── Scan para CADASTRO de nova etiqueta (hardware — sem JWT) ─────
+// Usado pelo ESP32 no modo cadastro: apenas lê, grava raw e emite via WebSocket
+rfidRoutes.post('/scan', validarApiKeyRfid, scanRfid);
+
+// ── Cadastro atômico de etiqueta (frontend — com JWT) ────────────
+// Chamado pelo frontend após o operador confirmar produto e lote
+rfidRoutes.post('/cadastrar', autenticar, cadastrarEtiqueta);
 
 // ── Etiquetas ───────────────────────────────────────────────────
 rfidRoutes.get('/etiqueta', autenticar, listarEtiquetas);

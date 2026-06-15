@@ -2,7 +2,7 @@ import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { RoleBasedRender } from "@/components/RoleBasedRender";
-import { LayoutDashboard, Package, Users, MessageSquare, FileText, Settings, UserCircle } from "lucide-react";
+import { LayoutDashboard, Package, Users, MessageSquare, FileText, Settings, UserCircle, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function AdminLayout() {
@@ -42,6 +42,18 @@ export function AdminLayout() {
           >
             <Package className="w-4 h-4" />
             Gestão de Estoque
+          </Link>
+
+          <Link
+            to="/admin/cadastro-rfid"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              isActive("/admin/cadastro-rfid")
+                ? "bg-secondary text-secondary-foreground font-medium"
+                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+            }`}
+          >
+            <ScanLine className="w-4 h-4" />
+            Cadastro de Tags
           </Link>
 
           <RoleBasedRender allowedRoles={["Admin"]}>

@@ -18,6 +18,7 @@ import { InventoryPage } from "./pages/admin/InventoryPage";
 import { UsersPage } from "./pages/admin/UsersPage";
 import { DocumentosPage } from "./pages/admin/DocumentosPage";
 import { SettingsPage } from "./pages/admin/SettingsPage";
+import { CadastroEtiquetaPage } from "./pages/admin/CadastroEtiquetaPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/admin" element={<ProtectedRoute requiredRole="Admin"><AdminLayout /></ProtectedRoute>}>
               <Route index element={<DashboardPage />} />
               <Route path="estoque" element={<InventoryPage />} />
+              <Route path="cadastro-rfid" element={<CadastroEtiquetaPage />} />
               <Route path="usuarios" element={<UsersPage />} />
               <Route path="documentos" element={<DocumentosPage />} />
               <Route path="settings" element={<SettingsPage />} />

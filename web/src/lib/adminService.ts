@@ -1,6 +1,20 @@
 import api from './api';
 
 // --- Typings ---
+export interface RfidScan {
+  epc: string;
+  id_leitura: number;
+  data_hora: string;
+  id_leitor: number;
+  rssi: number | null;
+  ja_cadastrado: boolean;
+  pacote?: {
+    id_pacote: number;
+    status: string;
+    lote?: { codigo_lote: string; produto?: { nome: string } };
+  } | null;
+}
+
 export interface DashboardData {
   visaoGeral: {
     totalItens: number;
@@ -191,3 +205,33 @@ export const registrarMovimentacao = async (dados: {
   const response = await api.post('/api/movimentacao', dados);
   return response.data;
 };
+
+// --- RFID Services ---
+
+/**
+ * Busca lotes de um produto, ordenados por data_validade ASC (FEFO).
+ * Lotes sem data de validade aparecem no final.
+ */
+export const fetchLotesPorProduto = async (id_produto: number): Promise<Lote[]> => {
+  const response = await api.get(`/api/lote?id_produto=${id_produto}`);
+  const lotes: Lote[] = response.data;
+  // Garante ordem FEFO no frontend: sem data → fim da lista
+  return lotes.sort((a, b) => {
+    if (!a.data_validade) return 1;
+    if (!b.data_validade) return -1;
+    return new Date(a.data_validade).getTime() - new Date(b.data_validade).getTime();
+  });
+};
+
+/**
+ * Cadastra uma nova etiqueta RFID de forma atômica:
+ * cria pacote + associa etiqueta + registra movimentação de Entrada.
+ */
+export const cadastrarEtiquetaRfid = async (dados: {
+  epc: string;
+  id_lote: number;
+}): Promise<{ pacote: Pacote; etiqueta: { id_rfid: number; epc: string; status: string } }> => {
+  const response = await api.post('/api/rfid/cadastrar', dados);
+  return response.data;
+};
+
