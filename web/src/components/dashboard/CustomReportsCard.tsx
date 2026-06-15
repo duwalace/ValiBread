@@ -8,13 +8,14 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowLeftRight,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
 
 // ── Tipos ──────────────────────────────────────────────────────────
-type TipoRelatorio = "TODOS" | "ENTRADA" | "SAÍDA" | "TRANSFERÊNCIA";
+type TipoRelatorio = "TODOS" | "Entrada" | "Saída" | "Transferência" | "Perda";
 
 interface Movimentacao {
   id_movimentacao: number;
@@ -53,19 +54,21 @@ const formatarDataHora = (iso: string): string => {
 };
 
 const corPorTipo = (tipo: string) => {
-  switch (tipo?.toUpperCase()) {
-    case "ENTRADA":      return "text-emerald-400";
-    case "SAÍDA":        return "text-rose-400";
-    case "TRANSFERÊNCIA": return "text-sky-400";
+  switch (tipo) {
+    case "Entrada":      return "text-emerald-400";
+    case "Saída":        return "text-rose-400";
+    case "Transferência": return "text-sky-400";
+    case "Perda":        return "text-amber-400";
     default:             return "text-muted-foreground";
   }
 };
 
 const IconePorTipo = ({ tipo }: { tipo: string }) => {
-  switch (tipo?.toUpperCase()) {
-    case "ENTRADA":       return <TrendingUp className="w-3 h-3 text-emerald-400" />;
-    case "SAÍDA":         return <TrendingDown className="w-3 h-3 text-rose-400" />;
-    case "TRANSFERÊNCIA": return <ArrowLeftRight className="w-3 h-3 text-sky-400" />;
+  switch (tipo) {
+    case "Entrada":       return <TrendingUp className="w-3 h-3 text-emerald-400" />;
+    case "Saída":         return <TrendingDown className="w-3 h-3 text-rose-400" />;
+    case "Transferência": return <ArrowLeftRight className="w-3 h-3 text-sky-400" />;
+    case "Perda":         return <AlertTriangle className="w-3 h-3 text-amber-400" />;
     default:              return null;
   }
 };
@@ -96,19 +99,25 @@ const CustomReportsCard = () => {
     return true;
   };
 
-  // ── Gerar pré-visualização ─────────────────────────────────────
-  const gerarPreview = async () => {
+  // ── Gerar pré-visualização ──────────────────────────────
+  /**
+   * Busca o preview do relatório.
+   * Aceita `tipoOverride` para evitar closure stale quando chamada
+   * logo após `setTipo()` (antes do React reconciliar o estado).
+   */
+  const gerarPreview = async (tipoOverride?: TipoRelatorio) => {
     setErroApi(null);
-    setPreview(null);
     if (!validarPeriodo()) return;
+
+    const tipoAtual = tipoOverride ?? tipo;
 
     setCarregando(true);
     try {
       const params: Record<string, string> = {
-        dataInicio: dataInicio,   // já em YYYY-MM-DD (valor nativo do input type=date)
-        dataFim:    dataFim,
+        dataInicio,
+        dataFim,
       };
-      if (tipo !== "TODOS") params.tipo = tipo;
+      if (tipoAtual !== "TODOS") params.tipo = tipoAtual;
 
       const { data } = await api.get<PreviewData>("/api/relatorio/preview", { params });
       setPreview(data);
@@ -117,8 +126,24 @@ const CustomReportsCard = () => {
         (err as { response?: { data?: { erro?: string } } })?.response?.data?.erro ??
         "Erro ao gerar pré-visualização.";
       setErroApi(msg);
+      setPreview(null);
     } finally {
       setCarregando(false);
+    }
+  };
+
+  /**
+   * Atualiza o tipo selecionado e, se já houver datas preenchidas,
+   * recarrega o preview automaticamente (sem precisar clicar no botão).
+   */
+  const handleTipoChange = (novoTipo: TipoRelatorio) => {
+    setTipo(novoTipo);
+    if (dataInicio && dataFim) {
+      // Passa novoTipo diretamente para evitar closure stale
+      gerarPreview(novoTipo);
+    } else {
+      // Sem datas, limpa o preview anterior
+      setPreview(null);
     }
   };
 
@@ -186,13 +211,14 @@ const CustomReportsCard = () => {
         <select
           id="relatorio-tipo"
           value={tipo}
-          onChange={(e) => { setTipo(e.target.value as TipoRelatorio); setPreview(null); }}
+          onChange={(e) => handleTipoChange(e.target.value as TipoRelatorio)}
           className="w-full h-9 rounded-md border border-border bg-secondary text-foreground text-sm px-3"
         >
-          <option value="TODOS">(Entradas, Saídas, Perdas)</option>
-          <option value="ENTRADA">Entradas</option>
-          <option value="SAÍDA">Saídas</option>
-          <option value="TRANSFERÊNCIA">Transferências</option>
+          <option value="TODOS">Todos os tipos</option>
+          <option value="Entrada">Entradas</option>
+          <option value="Saída">Saídas</option>
+          <option value="Transferência">Transferências</option>
+          <option value="Perda">Perdas</option>
         </select>
       </div>
 
@@ -241,7 +267,7 @@ const CustomReportsCard = () => {
       {/* Botão Gerar */}
       <Button
         id="btn-gerar-relatorio"
-        onClick={gerarPreview}
+        onClick={() => gerarPreview()}
         disabled={carregando}
         className="w-full bg-success hover:bg-success/90 text-success-foreground font-semibold"
       >
@@ -283,19 +309,23 @@ const CustomReportsCard = () => {
             </p>
           </div>
 
-          {/* Cards de resumo — py maior para respirar */}
-          <div className="grid grid-cols-3 divide-x divide-border border-b border-border">
-            <div className="px-2 py-2.5 text-center">
-              <p className="text-base font-bold text-emerald-400 leading-tight">{preview.resumo["ENTRADA"] ?? 0}</p>
+          {/* Cards de resumo — grid de 4 colunas */}
+          <div className="grid grid-cols-4 divide-x divide-border border-b border-border">
+            <div className="px-1.5 py-2.5 text-center">
+              <p className="text-base font-bold text-emerald-400 leading-tight">{preview.resumo["Entrada"] ?? 0}</p>
               <p className="text-muted-foreground text-[10px] mt-0.5">Entradas</p>
             </div>
-            <div className="px-2 py-2.5 text-center">
-              <p className="text-base font-bold text-rose-400 leading-tight">{preview.resumo["SAÍDA"] ?? 0}</p>
+            <div className="px-1.5 py-2.5 text-center">
+              <p className="text-base font-bold text-rose-400 leading-tight">{preview.resumo["Saída"] ?? 0}</p>
               <p className="text-muted-foreground text-[10px] mt-0.5">Saídas</p>
             </div>
-            <div className="px-2 py-2.5 text-center">
-              <p className="text-base font-bold text-sky-400 leading-tight">{preview.resumo["TRANSFERÊNCIA"] ?? 0}</p>
+            <div className="px-1.5 py-2.5 text-center">
+              <p className="text-base font-bold text-sky-400 leading-tight">{preview.resumo["Transferência"] ?? 0}</p>
               <p className="text-muted-foreground text-[10px] mt-0.5">Transf.</p>
+            </div>
+            <div className="px-1.5 py-2.5 text-center">
+              <p className="text-base font-bold text-amber-400 leading-tight">{preview.resumo["Perda"] ?? 0}</p>
+              <p className="text-muted-foreground text-[10px] mt-0.5">Perdas</p>
             </div>
           </div>
 

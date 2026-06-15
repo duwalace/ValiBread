@@ -23,7 +23,6 @@ import {
   contarPacotesPorProduto,
   resumoQuantidadeTodosProdutos,
   buscarLotesEmRisco,
-  buscarRiscoAgrupadoPorFaixa,
   contarEntradasSaidasGeral,
   buscarMovimentacoesFiltradas,
   resumoEntradasSaidasPorProduto,
@@ -34,10 +33,14 @@ import {
 import { gerarPlanilha } from './exporter.js';
 
 let produtosCached = null;
+let produtosCacheTimestamp = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
 export const getProdutos = async () => {
-  if (!produtosCached) {
+  const agora = Date.now();
+  if (!produtosCached || !produtosCacheTimestamp || (agora - produtosCacheTimestamp > CACHE_TTL_MS)) {
     produtosCached = await listarProdutos();
+    produtosCacheTimestamp = agora;
   }
   return produtosCached;
 };
@@ -52,6 +55,7 @@ export class ChatbotSession {
       tipoMovimentacao: null,
       dadosUltimaConsulta: null,
       nomeUltimaConsulta: 'relatorio',
+      diasRiscoSelecionado: null, // período selecionado no menu de risco (3, 5 ou 7)
     };
   }
 
@@ -63,6 +67,7 @@ export class ChatbotSession {
     this.state.menu = 'principal';
     this.state.produtoSelecionado = null;
     this.state.tipoMovimentacao = null;
+    this.state.diasRiscoSelecionado = null;
   }
 
   async processarEntrada(entrada) {
@@ -89,6 +94,9 @@ export class ChatbotSession {
           break;
         case 'perdas':
           result = await this.handleMenuPerdas(entrada);
+          break;
+        case 'perdas_periodo':
+          result = await this.handleMenuPerdasPeriodo(entrada);
           break;
         default:
           this.voltarMenuPrincipal();
@@ -174,12 +182,18 @@ export class ChatbotSession {
     }
 
     if (entrada === '*') {
-      const grupos = await buscarRiscoAgrupadoPorFaixa();
-      const dados = grupos[7];
+      // Usa o período que o usuário escolheu; se ainda não escolheu, usa 7 como padrão
+      const diasParaExportar = this.state.diasRiscoSelecionado ?? 7;
+      const dados = await buscarLotesEmRisco(diasParaExportar);
       if (dados.length === 0) {
-        return getInfoMessage('Nenhum lote em risco nos próximos 7 dias.');
+        return getInfoMessage(`Nenhum lote em risco nos próximos ${diasParaExportar} dias.`);
       }
-      const url = await gerarPlanilha(dados, 'risco_vencimento_7_dias', 'Produtos em Risco', this.id_usuario);
+      const url = await gerarPlanilha(
+        dados,
+        `risco_vencimento_${diasParaExportar}_dias`,
+        `Produtos em Risco (${diasParaExportar} dias)`,
+        this.id_usuario
+      );
       return { 
         ...getSucessoMessage(`Planilha gerada com sucesso!`),
         downloadUrl: url
@@ -188,6 +202,9 @@ export class ChatbotSession {
 
     const dias = faixasMap[entrada];
     if (!dias) return getErroMessage();
+
+    // Salva o período selecionado para uso na exportação
+    this.state.diasRiscoSelecionado = dias;
 
     const dados = await buscarLotesEmRisco(dias);
 
@@ -258,7 +275,7 @@ export class ChatbotSession {
 
   async handleMenuMovimentacaoTipo(entrada) {
     const produto = this.state.produtoSelecionado;
-    const tiposMap = { '1': 'ENTRADA', '2': 'SAIDA', '3': 'TODOS' };
+    const tiposMap = { '1': 'ENTRADA', '2': 'SAÍDA', '3': 'TODOS' };
 
     if (entrada === '0') {
       this.setMenu('movimentacao_produto');
@@ -311,7 +328,7 @@ export class ChatbotSession {
       return getMenuPrincipal();
     }
 
-    if (entrada === '*' || entrada === '1') {
+    if (entrada === '1') {
       const resumo = await resumoPerdas();
       const perdas = await buscarPerdas();
 
@@ -319,30 +336,84 @@ export class ChatbotSession {
         return getInfoMessage('Nenhuma perda registrada. 🎉');
       }
 
-      if (entrada === '*') {
-        const dadosFlat = perdas.map((a) => ({
-          produto: a.lote?.produto?.nome ?? 'Desconhecido',
-          lote: a.lote?.codigo_lote ?? '-',
-          data_validade: a.lote?.data_validade ?? '-',
-          mensagem: a.mensagem ?? '-',
-          data_hora: new Date(a.data_hora).toLocaleString('pt-BR'),
-        }));
-        const url = await gerarPlanilha(dadosFlat, 'perdas', 'Perdas', this.id_usuario);
-        return { 
-          ...getSucessoMessage(`Planilha gerada com sucesso!`),
-          downloadUrl: url
-        };
-      }
-
       let msg = `🗑️ Perdas — Resumo por Produto\n\n`;
       resumo.forEach((r) => {
-        msg += `${r.produto} | ${r.total_perdas} perda(s)\n`;
+        const ultima = new Date(r.ultima_perda).toLocaleDateString('pt-BR');
+        msg += `${r.produto} | ${r.total_perdas} pacote(s) | Última: ${ultima}\n`;
       });
-      msg += `\nTOTAL GERAL: ${perdas.length} perdas registradas`;
+      msg += `\nTOTAL GERAL: ${perdas.length} pacotes perdidos`;
 
       return { message: msg, options: getMenuPerdas().options };
     }
 
+    if (entrada === '2') {
+      this.setMenu('perdas_periodo');
+      const { getMenuPerdasPeriodo } = await import('./menuManager.js');
+      return getMenuPerdasPeriodo();
+    }
+
+    if (entrada === '*') {
+      const perdas = await buscarPerdas();
+      if (perdas.length === 0) {
+        return getInfoMessage('Nenhuma perda registrada para exportar. 🎉');
+      }
+
+      const dadosFlat = perdas.map((a) => ({
+        produto: a.lote?.produto?.nome ?? 'Desconhecido',
+        lote: a.lote?.codigo_lote ?? '-',
+        data_validade: a.lote?.data_validade ?? '-',
+        status_pacote: a.status_pacote ?? '-',
+        mensagem: a.mensagem ?? '-',
+        data_perda: new Date(a.data_hora).toLocaleDateString('pt-BR'),
+      }));
+      const url = await gerarPlanilha(dadosFlat, 'perdas', 'Perdas', this.id_usuario);
+      return { 
+        ...getSucessoMessage(`Planilha gerada com sucesso!`),
+        downloadUrl: url
+      };
+    }
+
     return getErroMessage();
+  }
+
+  async handleMenuPerdasPeriodo(entrada) {
+    const periodosMap = { '1': 7, '2': 30, '3': null };
+
+    if (entrada === '0') {
+      this.setMenu('perdas');
+      return getMenuPerdas();
+    }
+
+    const dias = periodosMap[entrada];
+    if (dias === undefined) return getErroMessage();
+
+    const todasPerdas = await buscarPerdas();
+    
+    let perdasFiltradas = todasPerdas;
+    if (dias !== null) {
+      const limite = new Date();
+      limite.setDate(limite.getDate() - dias);
+      perdasFiltradas = todasPerdas.filter(p => new Date(p.data_hora) >= limite);
+    }
+
+    if (perdasFiltradas.length === 0) {
+      const msgDias = dias ? `nos últimos ${dias} dias` : 'no total';
+      return { message: `ℹ️ Nenhuma perda registrada ${msgDias}. 🎉`, options: (await import('./menuManager.js')).getMenuPerdasPeriodo().options };
+    }
+
+    const periodoStr = dias ? `Últimos ${dias} dias` : 'Todas';
+    let msg = `📅 Perdas Detalhadas — ${periodoStr} (${perdasFiltradas.length} pacotes)\n\n`;
+    
+    // Mostra os 10 mais recentes
+    perdasFiltradas.slice(0, 10).forEach((p) => {
+      const dataStr = new Date(p.data_hora).toLocaleDateString('pt-BR');
+      msg += `${dataStr} | ${p.lote?.produto?.nome ?? 'Desconhecido'} | Lote: ${p.lote?.codigo_lote ?? '-'}\n`;
+    });
+    
+    if (perdasFiltradas.length > 10) {
+      msg += `... e mais ${perdasFiltradas.length - 10} pacotes. Exportar a planilha para ver todos.`;
+    }
+
+    return { message: msg.trim(), options: (await import('./menuManager.js')).getMenuPerdasPeriodo().options };
   }
 }

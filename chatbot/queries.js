@@ -53,11 +53,14 @@ export const listarProdutos = async () => {
  * @returns {{ total: number, em_estoque: number, separado: number }}
  */
 export const contarPacotesPorProduto = async (idProduto) => {
-  // Busca lotes do produto
+  const hojeISO = new Date().toISOString().split('T')[0];
+
+  // Busca lotes válidos do produto (não vencidos)
   const { data: lotes, error: erroLotes } = await supabase
     .from('lote')
     .select('id_lote')
-    .eq('id_produto', idProduto);
+    .eq('id_produto', idProduto)
+    .gte('data_validade', hojeISO);
   if (erroLotes) throw new Error(`Erro ao buscar lotes: ${erroLotes.message}`);
 
   if (!lotes || lotes.length === 0) {
@@ -166,7 +169,7 @@ export const buscarLotesEmRisco = async (dias) => {
       dias_restantes: diasRestantes,
       pacotes_ativos: pacotesAtivos.length,
     };
-  });
+  }).filter((lote) => lote.pacotes_ativos > 0);
 };
 
 /**
@@ -222,7 +225,7 @@ export const buscarRiscoAgrupadoPorFaixa = async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OPÇÃO 3 — ENTRADAS E SAÍDAS
-// Campo: movimentacao_estoque.tipo_movimentacao (varchar: 'ENTRADA' | 'SAIDA')
+// Campo: movimentacao_estoque.tipo_movimentacao (varchar: 'Entrada' | 'Saída' | 'ENTRADA' | 'SAIDA' etc)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -234,11 +237,11 @@ export const contarEntradasSaidasGeral = async () => {
     supabase
       .from('movimentacao_estoque')
       .select('*', { count: 'exact', head: true })
-      .eq('tipo_movimentacao', 'ENTRADA'),
+      .ilike('tipo_movimentacao', 'entrada'),
     supabase
       .from('movimentacao_estoque')
       .select('*', { count: 'exact', head: true })
-      .eq('tipo_movimentacao', 'SAIDA'),
+      .in('tipo_movimentacao', ['SAIDA', 'SAÍDA', 'Saída', 'Saida', 'saida', 'saída']),
   ]);
 
   if (resEntrada.error) throw new Error(`Erro ao contar entradas: ${resEntrada.error.message}`);
@@ -250,49 +253,13 @@ export const contarEntradasSaidasGeral = async () => {
   return { total_entradas, total_saidas, total_geral: total_entradas + total_saidas };
 };
 
-/**
- * Filtra entradas ou saídas de um produto específico.
- *
- * @param {number} idProduto
- * @param {'ENTRADA' | 'SAIDA'} tipo
- * @returns {Array} movimentações com data e código do lote
- */
-export const buscarMovimentacoesPorProduto = async (idProduto, tipo) => {
-  const { data, error } = await supabase
-    .from('movimentacao_estoque')
-    .select(`
-      id_movimentacao,
-      tipo_movimentacao,
-      data_hora,
-      pacote (
-        id_pacote,
-        lote (
-          codigo_lote,
-          data_validade,
-          produto ( nome )
-        )
-      )
-    `)
-    .eq('tipo_movimentacao', tipo)
-    .order('data_hora', { ascending: false });
 
-  if (error) throw new Error(`Erro ao buscar movimentações: ${error.message}`);
-
-  // Filtra pelo produto após o join (Supabase não suporta filtro em nested com .eq direto)
-  return data.filter(
-    (m) => m.pacote?.lote?.produto?.nome !== undefined &&
-           m.pacote?.lote?.produto !== null
-  ).filter((m) => {
-    // Se idProduto for fornecido, filtra pelo produto no join
-    return true; // será filtrado abaixo usando query auxiliar
-  });
-};
 
 /**
  * Versão otimizada: busca IDs dos lotes do produto e filtra movimentações por eles.
  *
  * @param {number} idProduto
- * @param {'ENTRADA' | 'SAIDA' | 'TODOS'} tipo
+ * @param {'ENTRADA' | 'SAÍDA' | 'TODOS'} tipo
  */
 export const buscarMovimentacoesFiltradas = async (idProduto, tipo) => {
   // Passo 1: pega os pacotes cujos lotes pertencem ao produto
@@ -331,7 +298,11 @@ export const buscarMovimentacoesFiltradas = async (idProduto, tipo) => {
     .order('data_hora', { ascending: false });
 
   if (tipo !== 'TODOS') {
-    query = query.eq('tipo_movimentacao', tipo);
+    if (tipo === 'ENTRADA') {
+      query = query.ilike('tipo_movimentacao', 'entrada');
+    } else if (tipo === 'SAÍDA' || tipo === 'SAIDA') {
+      query = query.in('tipo_movimentacao', ['SAIDA', 'SAÍDA', 'Saída', 'Saida', 'saida', 'saída']);
+    }
   }
 
   const { data, error } = await query;
@@ -363,8 +334,9 @@ export const resumoEntradasSaidasPorProduto = async () => {
     if (!mapa[nomeProduto]) {
       mapa[nomeProduto] = { produto: nomeProduto, entradas: 0, saidas: 0, total: 0 };
     }
-    if (mov.tipo_movimentacao === 'ENTRADA') mapa[nomeProduto].entradas++;
-    if (mov.tipo_movimentacao === 'SAIDA') mapa[nomeProduto].saidas++;
+    const tipo = (mov.tipo_movimentacao || '').toUpperCase();
+    if (tipo === 'ENTRADA') mapa[nomeProduto].entradas++;
+    if (tipo === 'SAIDA' || tipo === 'SAÍDA') mapa[nomeProduto].saidas++;
     mapa[nomeProduto].total++;
   }
 
@@ -377,27 +349,42 @@ export const resumoEntradasSaidasPorProduto = async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Busca todos os alertas do tipo 'PERDA', com dados do lote e produto.
+ * Busca todos os pacotes (EM_ESTOQUE ou SEPARADO) de lotes com data_validade < hoje.
+ * A data da perda é considerada a data de validade do lote.
  */
 export const buscarPerdas = async () => {
+  const hojeISO = new Date().toISOString().split('T')[0];
+
   const { data, error } = await supabase
-    .from('alerta')
+    .from('lote')
     .select(`
-      id_alerta,
-      tipo_alerta,
-      mensagem,
-      data_hora,
-      lote (
-        codigo_lote,
-        data_validade,
-        produto ( nome )
-      )
+      id_lote,
+      codigo_lote,
+      data_validade,
+      produto ( nome ),
+      pacote ( id_pacote, status )
     `)
-    .eq('tipo_alerta', 'PERDA')
-    .order('data_hora', { ascending: false });
+    .lt('data_validade', hojeISO)   // lote JÁ VENCIDO
+    .order('data_validade', { ascending: false });
 
   if (error) throw new Error(`Erro ao buscar perdas: ${error.message}`);
-  return data;
+
+  // Apenas pacotes que NÃO foram expedidos antes do vencimento
+  return (data || []).flatMap(lote =>
+    (lote.pacote ?? [])
+      .filter(p => ['EM_ESTOQUE', 'SEPARADO'].includes(p.status))
+      .map(p => ({
+        lote: {
+          codigo_lote: lote.codigo_lote,
+          data_validade: lote.data_validade,
+          produto: lote.produto,
+        },
+        id_pacote: p.id_pacote,
+        status_pacote: p.status,
+        data_hora: `${lote.data_validade}T00:00:00`, // data do vencimento como data da perda
+        mensagem: `Pacote vencido em estoque — ${lote.produto?.nome}`,
+      }))
+  );
 };
 
 /**
@@ -407,17 +394,17 @@ export const resumoPerdas = async () => {
   const perdas = await buscarPerdas();
 
   const mapa = {};
-  for (const alerta of perdas) {
-    const nomeProduto = alerta.lote?.produto?.nome ?? 'Desconhecido';
+  for (const perda of perdas) {
+    const nomeProduto = perda.lote?.produto?.nome ?? 'Desconhecido';
     if (!mapa[nomeProduto]) {
-      mapa[nomeProduto] = { produto: nomeProduto, total_perdas: 0, registros: [] };
+      mapa[nomeProduto] = { produto: nomeProduto, total_perdas: 0, ultima_perda: null };
     }
     mapa[nomeProduto].total_perdas++;
-    mapa[nomeProduto].registros.push({
-      data: alerta.data_hora,
-      lote: alerta.lote?.codigo_lote,
-      mensagem: alerta.mensagem,
-    });
+    
+    const dataPerda = new Date(perda.data_hora);
+    if (!mapa[nomeProduto].ultima_perda || dataPerda > new Date(mapa[nomeProduto].ultima_perda)) {
+      mapa[nomeProduto].ultima_perda = perda.data_hora;
+    }
   }
 
   return Object.values(mapa).sort((a, b) => b.total_perdas - a.total_perdas);

@@ -86,10 +86,23 @@ export const getMenuTipoMovimentacao = (nomeProduto) => {
 
 export const getMenuPerdas = () => {
   return {
-    message: '🗑️ Perdas — Resumo por Produto',
+    message: '🗑️ Perdas (Itens Vencidos em Estoque)',
     options: [
-      { key: '1', label: 'Ver todas as perdas' },
+      { key: '1', label: 'Ver perdas recentes' },
+      { key: '2', label: 'Filtrar por período...' },
       { key: '*', label: 'Exportar planilha de perdas' },
+      { key: '0', label: 'Voltar' }
+    ]
+  };
+};
+
+export const getMenuPerdasPeriodo = () => {
+  return {
+    message: '📅 Selecione o período de perdas',
+    options: [
+      { key: '1', label: 'Últimos 7 dias' },
+      { key: '2', label: 'Últimos 30 dias' },
+      { key: '3', label: 'Todas as perdas' },
       { key: '0', label: 'Voltar' }
     ]
   };
