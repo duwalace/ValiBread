@@ -163,8 +163,12 @@ export const buscarInventarioFEFOSecure = async (filtros = {}, tenantSupabase) =
  * Busca as movimentações de estoque para relatórios personalizados.
  * Mantida por compatibilidade com testes existentes.
  */
-export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, _tenantSupabase) => {
-  let query = supabase
+export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, tenantSupabase) => {
+  if (!tenantSupabase) {
+    throw new Error('Cliente Supabase autenticado é obrigatório para consultar movimentações.');
+  }
+
+  let query = tenantSupabase
     .from('movimentacao_estoque')
     .select(`
       id_movimentacao,
@@ -192,9 +196,8 @@ export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, _tenantSup
   }
 
   const { data, error } = await query;
-
   if (error) throw new Error(`Erro ao buscar relatório de movimentações: ${error.message}`);
-  return data;
+  return data ?? [];
 };
 
 /**

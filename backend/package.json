@@ -13,6 +13,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@azure/storage-blob": "^12.34.0",
     "@supabase/supabase-js": "^2.99.3",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
+    "pg": "^8.23.1",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {

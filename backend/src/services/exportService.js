@@ -2,7 +2,8 @@ import exceljs from 'exceljs';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import jwt from 'jsonwebtoken';
-import { buscarRelatorioCompleto } from '../models/dashboardModel.js';
+import { buscarRelatorioMovimentacaoSecure } from '../models/dashboardModel.js';
+import { getTenantSupabase } from '../config/supabaseTenant.js';
 import supabase from '../config/supabase.js';
 
 const formatarDataHora = (dataStr) => {
@@ -22,8 +23,9 @@ const formatarDataHora = (dataStr) => {
  *   - outro tipo     → apenas movimentações do tipo especificado
  */
 export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) => {
-  // buscarRelatorioCompleto usa o cliente admin internamente (sem RLS bloqueando)
-  const dadosBrutos = await buscarRelatorioCompleto(filtros);
+  // Consulta com o JWT do usuário para que as políticas RLS do Supabase sejam aplicadas.
+  const tenantSupabase = getTenantSupabase(userToken);
+  const dadosBrutos = await buscarRelatorioMovimentacaoSecure(filtros, tenantSupabase);
 
   const dados = dadosBrutos.map(item => [
     formatarDataHora(item.data_hora),
