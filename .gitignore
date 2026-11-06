@@ -56,3 +56,6 @@ Thumbs.db
 
 # Banco de Dados
 db/
+
+# Backups locais temporarios
+.repair-backup-*/

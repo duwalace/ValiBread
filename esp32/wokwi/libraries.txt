@@ -1,0 +1,4 @@
+# Bibliotecas usadas pelo projeto ValiBread RFID
+MFRC522
+LiquidCrystal I2C
+
