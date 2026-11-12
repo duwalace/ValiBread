@@ -1,24 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { gerarRelatorioPersonalizado } from './exportService.js';
 import * as dashboardModel from '../models/dashboardModel.js';
-import { getTenantSupabase } from '../config/supabaseTenant.js';
 
 // Isola o banco de dados e as dependências
 vi.mock('../models/dashboardModel.js', () => ({
   buscarRelatorioMovimentacaoSecure: vi.fn()
 }));
 
-vi.mock('../config/supabaseTenant.js', () => ({
-  getTenantSupabase: vi.fn()
+vi.mock('../config/database.js', () => ({
+  default: {
+    query: vi.fn().mockResolvedValue({ rows: [] })
+  }
 }));
 
 describe('ExportService - Relatórios Personalizados', () => {
   const mockToken = 'mock-user-token-123';
-  const mockTenantSupabase = { mockClient: true };
   
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getTenantSupabase).mockReturnValue(mockTenantSupabase);
   });
 
   const mockFiltros = {
@@ -40,45 +39,29 @@ describe('ExportService - Relatórios Personalizados', () => {
     }
   ];
 
-  it('should call the database model with correct filters and sandboxed tenant client', async () => {
-    // Arrange
+  it('should call the database model with correct filters', async () => {
     vi.mocked(dashboardModel.buscarRelatorioMovimentacaoSecure).mockResolvedValue(mockData);
 
-    // Act
     await gerarRelatorioPersonalizado(mockFiltros, mockToken, 'EXCEL');
 
-    // Assert: O isolamento de Tenant foi inicializado com o JWT
-    expect(getTenantSupabase).toHaveBeenCalledWith(mockToken);
-    
-    // Assert: Os filtros (regra de negócio) e o cliente sandboxed foram passados para a camada de DB
-    expect(dashboardModel.buscarRelatorioMovimentacaoSecure).toHaveBeenCalledWith(
-      mockFiltros, 
-      mockTenantSupabase
-    );
+    expect(dashboardModel.buscarRelatorioMovimentacaoSecure).toHaveBeenCalledWith(mockFiltros);
   });
 
   it('should return a valid Buffer when exporting to EXCEL with filters applied', async () => {
-    // Arrange
     vi.mocked(dashboardModel.buscarRelatorioMovimentacaoSecure).mockResolvedValue(mockData);
 
-    // Act
     const resultBuffer = await gerarRelatorioPersonalizado(mockFiltros, mockToken, 'EXCEL');
 
-    // Assert: Resultado observável válido
     expect(resultBuffer).toBeInstanceOf(Buffer);
     expect(resultBuffer.length).toBeGreaterThan(0);
   });
 
   it('should return a valid Buffer when exporting to PDF with filters applied', async () => {
-    // Arrange
     vi.mocked(dashboardModel.buscarRelatorioMovimentacaoSecure).mockResolvedValue(mockData);
 
-    // Act
     const resultBuffer = await gerarRelatorioPersonalizado(mockFiltros, mockToken, 'PDF');
 
-    // Assert: Resultado observável válido
     expect(resultBuffer).toBeInstanceOf(Buffer);
     expect(resultBuffer.length).toBeGreaterThan(0);
   });
 });
-

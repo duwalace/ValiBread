@@ -1,3 +1,4 @@
+import pool from '../config/database.js';
 import { 
   contarTotalPacotes, 
   contarPacotesParaEntrega, 
@@ -5,7 +6,6 @@ import {
   buscarMovimentacoesMesAtual, 
   buscarInventarioFEFO 
 } from '../models/dashboardModel.js';
-import supabase from '../config/supabase.js';
 
 /**
  * Calcula a diferença em dias entre hoje e uma data (passada ou futura).
@@ -27,39 +27,53 @@ const calcularDiasRestantes = (dataVencimentoStr) => {
 const buscarItensVencidos = async () => {
   const hojeISO = new Date().toISOString().split('T')[0];
 
-  const { data, error } = await supabase
-    .from('lote')
-    .select('id_lote, data_validade, pacote ( id_pacote )')
-    .lt('data_validade', hojeISO);
+  try {
+    const query = `
+      SELECT 
+        l.id_lote, 
+        l.data_validade::text AS data_validade, 
+        COALESCE(
+          json_agg(
+            json_build_object('id_pacote', p.id_pacote)
+          ) FILTER (WHERE p.id_pacote IS NOT NULL),
+          '[]'
+        ) AS pacote
+      FROM lote l
+      LEFT JOIN pacote p ON l.id_lote = p.id_lote
+      WHERE l.data_validade < $1::date
+      GROUP BY l.id_lote, l.data_validade
+    `;
+    const { rows } = await pool.query(query, [hojeISO]);
 
-  if (error) throw new Error(`Erro ao buscar itens vencidos: ${error.message}`);
+    const grupos = {
+      '1-3 dias de atraso':         { quantidade: 0, cor: 'hsl(30, 70%, 45%)'  },
+      '4-6 dias de atraso':         { quantidade: 0, cor: 'hsl(0, 65%, 38%)'   },
+      'Mais de 1 semana de atraso': { quantidade: 0, cor: 'hsl(345, 60%, 30%)' },
+    };
 
-  const grupos = {
-    '1-3 dias de atraso':         { quantidade: 0, cor: 'hsl(30, 70%, 45%)'  },
-    '4-6 dias de atraso':         { quantidade: 0, cor: 'hsl(0, 65%, 38%)'   },
-    'Mais de 1 semana de atraso': { quantidade: 0, cor: 'hsl(345, 60%, 30%)' },
-  };
+    let totalVencidos = 0;
 
-  let totalVencidos = 0;
+    rows.forEach(lote => {
+      const qtd = lote.pacote ? lote.pacote.length : 0;
+      if (qtd === 0) return;
+      const diasAtraso = Math.abs(calcularDiasRestantes(lote.data_validade) ?? 0);
+      totalVencidos += qtd;
+      if (diasAtraso <= 3)      grupos['1-3 dias de atraso'].quantidade += qtd;
+      else if (diasAtraso <= 6) grupos['4-6 dias de atraso'].quantidade += qtd;
+      else                      grupos['Mais de 1 semana de atraso'].quantidade += qtd;
+    });
 
-  (data || []).forEach(lote => {
-    const qtd = lote.pacote ? lote.pacote.length : 0;
-    if (qtd === 0) return;
-    const diasAtraso = Math.abs(calcularDiasRestantes(lote.data_validade) ?? 0);
-    totalVencidos += qtd;
-    if (diasAtraso <= 3)      grupos['1-3 dias de atraso'].quantidade += qtd;
-    else if (diasAtraso <= 6) grupos['4-6 dias de atraso'].quantidade += qtd;
-    else                      grupos['Mais de 1 semana de atraso'].quantidade += qtd;
-  });
-
-  return {
-    totalVencidos,
-    grupos: Object.keys(grupos).map(chave => ({
-      nome: chave,
-      quantidade: grupos[chave].quantidade,
-      cor: grupos[chave].cor,
-    })),
-  };
+    return {
+      totalVencidos,
+      grupos: Object.keys(grupos).map(chave => ({
+        nome: chave,
+        quantidade: grupos[chave].quantidade,
+        cor: grupos[chave].cor,
+      })),
+    };
+  } catch (error) {
+    throw new Error(`Erro ao buscar itens vencidos: ${error.message}`);
+  }
 };
 
 /**
@@ -78,20 +92,20 @@ export const obterDadosDashboard = async (filtros) => {
   ] = await Promise.all([
     contarTotalPacotes(),
     contarPacotesParaEntrega(),
-    // Janela FEFO: apenas os próximos 7 dias (corrigido de 30 para 7)
     buscarLotesProximosVencimento(7),
     buscarMovimentacoesMesAtual(),
     buscarInventarioFEFO(filtros),
-    supabase
-      .from('alerta')
-      .select('id_alerta, tipo_alerta, mensagem, data_hora', { count: 'exact' })
-      .order('data_hora', { ascending: false })
-      .limit(10)
-      .then(r => ({ dados: r.data || [], total: r.count || 0 })),
-    supabase
-      .from('produto')
-      .select('id_produto, nome, estoque_minimo')
-      .then(r => r.data || []),
+    (async () => {
+      const [dadosRes, totalRes] = await Promise.all([
+        pool.query('SELECT id_alerta, tipo_alerta, mensagem, data_hora FROM alerta ORDER BY data_hora DESC LIMIT 10'),
+        pool.query('SELECT COUNT(*)::int AS count FROM alerta')
+      ]);
+      return {
+        dados: dadosRes.rows || [],
+        total: totalRes.rows[0]?.count || 0
+      };
+    })(),
+    pool.query('SELECT id_produto, nome, estoque_minimo FROM produto').then(r => r.rows || []),
     buscarItensVencidos(),
   ]);
 
@@ -139,10 +153,9 @@ export const obterDadosDashboard = async (filtros) => {
   movimentacoesMes.forEach(mov => {
     const dia = new Date(mov.data_hora).getDate();
     const semana = `Sem ${Math.min(Math.ceil(dia / 7), 4)}`;
-    // Comparação case-insensitive: banco grava 'Entrada'/'Saída'/'Transferência'
     const tipo = (mov.tipo_movimentacao || '').toLowerCase();
-    if (tipo === 'entrada')                       movimentacaoPorSemana[semana].entradas++;
-    else if (tipo === 'saída' || tipo === 'saida') movimentacaoPorSemana[semana].saidas++;
+    if (tipo === 'entrada')                        movimentacaoPorSemana[semana].entradas++;
+    else if (tipo === 'saída' || tipo === 'saida')  movimentacaoPorSemana[semana].saidas++;
   });
 
   const movimentacaoMes = Object.keys(movimentacaoPorSemana).map(chave => ({

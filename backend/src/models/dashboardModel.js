@@ -1,17 +1,18 @@
-import supabase from '../config/supabase.js';
+import pool from '../config/database.js';
 
 /**
  * Conta pacotes ativos em estoque: EM_ESTOQUE + SEPARADO.
  * Exclui EXPEDIDO (já saíram fisicamente).
  */
 export const contarTotalPacotes = async () => {
-  const { count, error } = await supabase
-    .from('pacote')
-    .select('*', { count: 'exact', head: true })
-    .in('status', ['EM_ESTOQUE', 'SEPARADO']);
-
-  if (error) throw new Error(`Erro ao contar pacotes ativos: ${error.message}`);
-  return count;
+  try {
+    const { rows } = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM pacote WHERE status IN ('EM_ESTOQUE', 'SEPARADO')"
+    );
+    return rows[0]?.count ?? 0;
+  } catch (error) {
+    throw new Error(`Erro ao contar pacotes ativos: ${error.message}`);
+  }
 };
 
 /**
@@ -19,13 +20,14 @@ export const contarTotalPacotes = async () => {
  * aguardando saída física. Fonte do card "Para Entrega" no dashboard.
  */
 export const contarPacotesParaEntrega = async () => {
-  const { count, error } = await supabase
-    .from('pacote')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'SEPARADO');
-
-  if (error) throw new Error(`Erro ao contar pacotes separados: ${error.message}`);
-  return count;
+  try {
+    const { rows } = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM pacote WHERE status = 'SEPARADO'"
+    );
+    return rows[0]?.count ?? 0;
+  } catch (error) {
+    throw new Error(`Erro ao contar pacotes separados: ${error.message}`);
+  }
 };
 
 /**
@@ -40,14 +42,38 @@ export const buscarLotesProximosVencimento = async (dias = 7) => {
   const hojeISO = hoje.toISOString().split('T')[0];
   const limiteISO = limite.toISOString().split('T')[0];
 
-  const { data, error } = await supabase
-    .from('lote')
-    .select('id_lote, codigo_lote, data_validade, produto ( nome ), pacote ( id_pacote )')
-    .gte('data_validade', hojeISO)
-    .lte('data_validade', limiteISO);
+  try {
+    const query = `
+      SELECT 
+        l.id_lote,
+        l.codigo_lote,
+        l.data_validade::text AS data_validade,
+        pr.nome AS produto_nome,
+        COALESCE(
+          json_agg(
+            json_build_object('id_pacote', p.id_pacote)
+          ) FILTER (WHERE p.id_pacote IS NOT NULL),
+          '[]'
+        ) AS pacote
+      FROM lote l
+      LEFT JOIN produto pr ON l.id_produto = pr.id_produto
+      LEFT JOIN pacote p ON l.id_lote = p.id_lote
+      WHERE l.data_validade >= $1::date AND l.data_validade <= $2::date
+      GROUP BY l.id_lote, l.codigo_lote, l.data_validade, pr.nome
+      ORDER BY l.data_validade ASC
+    `;
 
-  if (error) throw new Error(`Erro ao buscar lotes próximos ao vencimento: ${error.message}`);
-  return data;
+    const { rows } = await pool.query(query, [hojeISO, limiteISO]);
+    return rows.map(r => ({
+      id_lote: r.id_lote,
+      codigo_lote: r.codigo_lote,
+      data_validade: r.data_validade,
+      produto: r.produto_nome ? { nome: r.produto_nome } : null,
+      pacote: r.pacote || []
+    }));
+  } catch (error) {
+    throw new Error(`Erro ao buscar lotes próximos ao vencimento: ${error.message}`);
+  }
 };
 
 /**
@@ -58,14 +84,18 @@ export const buscarMovimentacoesMesAtual = async () => {
   const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
   const inicioMesISO = inicioMes.toISOString();
 
-  const { data, error } = await supabase
-    .from('movimentacao_estoque')
-    .select('id_movimentacao, tipo_movimentacao, data_hora')
-    .gte('data_hora', inicioMesISO)
-    .order('data_hora', { ascending: true });
-
-  if (error) throw new Error(`Erro ao buscar movimentações: ${error.message}`);
-  return data;
+  try {
+    const query = `
+      SELECT id_movimentacao, tipo_movimentacao, data_hora
+      FROM movimentacao_estoque
+      WHERE data_hora >= $1
+      ORDER BY data_hora ASC
+    `;
+    const { rows } = await pool.query(query, [inicioMesISO]);
+    return rows;
+  } catch (error) {
+    throw new Error(`Erro ao buscar movimentações: ${error.message}`);
+  }
 };
 
 /**
@@ -73,145 +103,147 @@ export const buscarMovimentacoesMesAtual = async () => {
  * data_validade ASC (FEFO). Suporta filtros opcionais.
  */
 export const buscarInventarioFEFO = async (filtros = {}) => {
-  let query = supabase
-    .from('pacote')
-    .select(`
-      id_pacote,
-      lote!inner (
-        id_lote,
-        codigo_lote,
-        data_fabricacao,
-        data_validade,
-        status,
-        produto!inner ( id_produto, nome )
-      ),
-      rfid_etiqueta ( epc, status )
-    `)
-    .order('data_validade', { referencedTable: 'lote', ascending: true });
+  try {
+    const conditions = [];
+    const values = [];
 
-  // Filtros opcionais
-  if (filtros.categoria) {
-    query = query.ilike('lote.produto.nome', `%${filtros.categoria}%`);
+    if (filtros.categoria) {
+      values.push(`%${filtros.categoria}%`);
+      conditions.push(`pr.nome ILIKE $${values.length}`);
+    }
+    if (filtros.lote) {
+      values.push(`%${filtros.lote}%`);
+      conditions.push(`l.codigo_lote ILIKE $${values.length}`);
+    }
+    if (filtros.dataFabricacaoInicio) {
+      values.push(filtros.dataFabricacaoInicio);
+      conditions.push(`l.data_fabricacao >= $${values.length}::date`);
+    }
+    if (filtros.dataFabricacaoFim) {
+      values.push(filtros.dataFabricacaoFim);
+      conditions.push(`l.data_fabricacao <= $${values.length}::date`);
+    }
+    if (filtros.dataValidadeInicio) {
+      values.push(filtros.dataValidadeInicio);
+      conditions.push(`l.data_validade >= $${values.length}::date`);
+    }
+    if (filtros.dataValidadeFim) {
+      values.push(filtros.dataValidadeFim);
+      conditions.push(`l.data_validade <= $${values.length}::date`);
+    }
+    if (filtros.tagRfid) {
+      values.push(`%${filtros.tagRfid}%`);
+      conditions.push(`r.epc ILIKE $${values.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const query = `
+      SELECT 
+        p.id_pacote,
+        l.id_lote,
+        l.codigo_lote,
+        l.data_fabricacao::text AS data_fabricacao,
+        l.data_validade::text AS data_validade,
+        l.status AS lote_status,
+        pr.id_produto,
+        pr.nome AS produto_nome,
+        r.epc AS rfid_epc,
+        r.status AS rfid_status
+      FROM pacote p
+      JOIN lote l ON p.id_lote = l.id_lote
+      JOIN produto pr ON l.id_produto = pr.id_produto
+      LEFT JOIN rfid_etiqueta r ON p.id_pacote = r.id_pacote
+      ${whereClause}
+      ORDER BY l.data_validade ASC
+    `;
+
+    const { rows } = await pool.query(query, values);
+    return rows.map(r => ({
+      id_pacote: r.id_pacote,
+      lote: {
+        id_lote: r.id_lote,
+        codigo_lote: r.codigo_lote,
+        data_fabricacao: r.data_fabricacao,
+        data_validade: r.data_validade,
+        status: r.lote_status,
+        produto: {
+          id_produto: r.id_produto,
+          nome: r.produto_nome
+        }
+      },
+      rfid_etiqueta: r.rfid_epc ? {
+        epc: r.rfid_epc,
+        status: r.rfid_status
+      } : null
+    }));
+  } catch (error) {
+    throw new Error(`Erro ao buscar inventário FEFO: ${error.message}`);
   }
-
-  if (filtros.lote) {
-    query = query.ilike('lote.codigo_lote', `%${filtros.lote}%`);
-  }
-
-  if (filtros.dataFabricacaoInicio) {
-    query = query.gte('lote.data_fabricacao', filtros.dataFabricacaoInicio);
-  }
-
-  if (filtros.dataFabricacaoFim) {
-    query = query.lte('lote.data_fabricacao', filtros.dataFabricacaoFim);
-  }
-
-  if (filtros.dataValidadeInicio) {
-    query = query.gte('lote.data_validade', filtros.dataValidadeInicio);
-  }
-
-  if (filtros.dataValidadeFim) {
-    query = query.lte('lote.data_validade', filtros.dataValidadeFim);
-  }
-
-  if (filtros.tagRfid) {
-    query = query.ilike('rfid_etiqueta.epc', `%${filtros.tagRfid}%`);
-  }
-
-  const { data, error } = await query;
-
-  if (error) throw new Error(`Erro ao buscar inventário FEFO: ${error.message}`);
-  return data;
 };
 
 /**
- * Busca o inventário ativo FEFO, mas recebendo o cliente Supabase com 
- * o token do usuário injetado, garantindo Isolamento de Tenant via RLS.
+ * Busca o inventário ativo FEFO (mantido para compatibilidade).
  */
-export const buscarInventarioFEFOSecure = async (filtros = {}, tenantSupabase) => {
-  let query = tenantSupabase
-    .from('pacote')
-    .select(`
-      id_pacote,
-      lote!inner (
-        id_lote,
-        codigo_lote,
-        data_fabricacao,
-        data_validade,
-        status,
-        produto!inner ( id_produto, nome )
-      ),
-      rfid_etiqueta ( epc, status )
-    `)
-    .order('data_validade', { referencedTable: 'lote', ascending: true });
-
-  if (filtros.categoria) query = query.ilike('lote.produto.nome', `%${filtros.categoria}%`);
-  if (filtros.lote) query = query.ilike('lote.codigo_lote', `%${filtros.lote}%`);
-  if (filtros.dataFabricacaoInicio) query = query.gte('lote.data_fabricacao', filtros.dataFabricacaoInicio);
-  if (filtros.dataFabricacaoFim) query = query.lte('lote.data_fabricacao', filtros.dataFabricacaoFim);
-  if (filtros.dataValidadeInicio) query = query.gte('lote.data_validade', filtros.dataValidadeInicio);
-  if (filtros.dataValidadeFim) query = query.lte('lote.data_validade', filtros.dataValidadeFim);
-  if (filtros.tagRfid) query = query.ilike('rfid_etiqueta.epc', `%${filtros.tagRfid}%`);
-
-  const { data, error } = await query;
-
-  if (error) throw new Error(`Erro ao buscar inventário FEFO seguro: ${error.message}`);
-  return data;
+export const buscarInventarioFEFOSecure = async (filtros = {}, _tenantClient = null) => {
+  return buscarInventarioFEFO(filtros);
 };
 
 /**
  * Busca as movimentações de estoque para relatórios personalizados.
- * Mantida por compatibilidade com testes existentes.
  */
-export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, tenantSupabase) => {
-  if (!tenantSupabase) {
-    throw new Error('Cliente Supabase autenticado é obrigatório para consultar movimentações.');
+export const buscarRelatorioMovimentacaoSecure = async (filtros = {}, _tenantClient = null) => {
+  try {
+    const conditions = [];
+    const values = [];
+
+    if (filtros.tipo && filtros.tipo !== 'TODOS') {
+      values.push(filtros.tipo);
+      conditions.push(`m.tipo_movimentacao = $${values.length}`);
+    }
+    if (filtros.dataInicio) {
+      values.push(`${filtros.dataInicio}T00:00:00`);
+      conditions.push(`m.data_hora >= $${values.length}`);
+    }
+    if (filtros.dataFim) {
+      values.push(`${filtros.dataFim}T23:59:59`);
+      conditions.push(`m.data_hora <= $${values.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const query = `
+      SELECT 
+        m.id_movimentacao,
+        m.tipo_movimentacao,
+        m.data_hora,
+        l.codigo_lote,
+        pr.nome AS produto_nome
+      FROM movimentacao_estoque m
+      LEFT JOIN pacote p ON m.id_pacote = p.id_pacote
+      LEFT JOIN lote l ON p.id_lote = l.id_lote
+      LEFT JOIN produto pr ON l.id_produto = pr.id_produto
+      ${whereClause}
+      ORDER BY m.data_hora DESC
+    `;
+
+    const { rows } = await pool.query(query, values);
+    return rows.map(r => ({
+      id_movimentacao: r.id_movimentacao,
+      tipo_movimentacao: r.tipo_movimentacao,
+      data_hora: r.data_hora,
+      pacote: r.codigo_lote ? {
+        lote: {
+          codigo_lote: r.codigo_lote,
+          produto: r.produto_nome ? { nome: r.produto_nome } : null
+        }
+      } : null
+    }));
+  } catch (error) {
+    throw new Error(`Erro ao buscar relatório de movimentações: ${error.message}`);
   }
-
-  let query = tenantSupabase
-    .from('movimentacao_estoque')
-    .select(`
-      id_movimentacao,
-      tipo_movimentacao,
-      data_hora,
-      pacote (
-        lote (
-          codigo_lote,
-          produto ( nome )
-        )
-      )
-    `)
-    .order('data_hora', { ascending: false });
-
-  if (filtros.tipo && filtros.tipo !== 'TODOS') {
-    query = query.eq('tipo_movimentacao', filtros.tipo);
-  }
-
-  if (filtros.dataInicio) {
-    query = query.gte('data_hora', `${filtros.dataInicio}T00:00:00`);
-  }
-
-  if (filtros.dataFim) {
-    query = query.lte('data_hora', `${filtros.dataFim}T23:59:59`);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(`Erro ao buscar relatório de movimentações: ${error.message}`);
-  return data ?? [];
 };
 
 /**
  * Busca o relatório completo de movimentações + perdas para o painel do dashboard.
- *
- * Fontes de dados:
- *   - movimentacao_estoque: tipos 'Entrada', 'Saída', 'Transferência'
- *   - Perdas: pacotes cujo lote tem data_validade dentro do período informado
- *             (mesma lógica de "Itens Vencidos" do dashboard principal)
- *
- * Regras de inclusão por filtros.tipo:
- *   - 'TODOS' ou undefined: inclui movimentações E perdas
- *   - 'Perda':              inclui apenas pacotes vencidos no período
- *   - outro valor:          inclui apenas movimentações do tipo especificado
  */
 export const buscarRelatorioCompleto = async (filtros = {}) => {
   const inicioISO = filtros.dataInicio ? `${filtros.dataInicio}T00:00:00` : null;
@@ -223,83 +255,116 @@ export const buscarRelatorioCompleto = async (filtros = {}) => {
   const incluirMovimentacoes = tipoEhTodos || !tipoEhPerda;
   const incluirPerdas        = tipoEhTodos || tipoEhPerda;
 
-  // 1. Movimentações (Entrada / Saída / Transferência)
   let movimentacoes = [];
   if (incluirMovimentacoes) {
     try {
-      let q = supabase
-        .from('movimentacao_estoque')
-        .select(`
-          id_movimentacao,
-          tipo_movimentacao,
-          data_hora,
-          pacote (
-            id_pacote,
-            rfid_etiqueta ( epc, status ),
-            lote ( codigo_lote, produto ( nome ) )
-          )
-        `)
-        .order('data_hora', { ascending: false });
+      const conditions = [];
+      const values = [];
 
       if (!tipoEhTodos) {
-        q = q.eq('tipo_movimentacao', filtros.tipo);
+        values.push(filtros.tipo);
+        conditions.push(`m.tipo_movimentacao = $${values.length}`);
       }
-      if (inicioISO) q = q.gte('data_hora', inicioISO);
-      if (fimISO)    q = q.lte('data_hora', fimISO);
+      if (inicioISO) {
+        values.push(inicioISO);
+        conditions.push(`m.data_hora >= $${values.length}`);
+      }
+      if (fimISO) {
+        values.push(fimISO);
+        conditions.push(`m.data_hora <= $${values.length}`);
+      }
 
-      const { data, error } = await q;
-      if (error) {
-        console.error('[buscarRelatorioCompleto] Erro em movimentacao_estoque:', error.message);
-      } else {
-        movimentacoes = data || [];
-      }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const query = `
+        SELECT 
+          m.id_movimentacao,
+          m.tipo_movimentacao,
+          m.data_hora,
+          p.id_pacote,
+          r.epc AS rfid_epc,
+          r.status AS rfid_status,
+          l.codigo_lote,
+          pr.nome AS produto_nome
+        FROM movimentacao_estoque m
+        LEFT JOIN pacote p ON m.id_pacote = p.id_pacote
+        LEFT JOIN rfid_etiqueta r ON p.id_pacote = r.id_pacote
+        LEFT JOIN lote l ON p.id_lote = l.id_lote
+        LEFT JOIN produto pr ON l.id_produto = pr.id_produto
+        ${whereClause}
+        ORDER BY m.data_hora DESC
+      `;
+
+      const { rows } = await pool.query(query, values);
+      movimentacoes = rows.map(r => ({
+        id_movimentacao: r.id_movimentacao,
+        tipo_movimentacao: r.tipo_movimentacao,
+        data_hora: r.data_hora,
+        pacote: r.id_pacote ? {
+          id_pacote: r.id_pacote,
+          rfid_etiqueta: r.rfid_epc ? { epc: r.rfid_epc, status: r.rfid_status } : null,
+          lote: r.codigo_lote ? {
+            codigo_lote: r.codigo_lote,
+            produto: r.produto_nome ? { nome: r.produto_nome } : null
+          } : null
+        } : null
+      }));
     } catch (e) {
       console.error('[buscarRelatorioCompleto] Excecao em movimentacoes:', e.message);
     }
   }
 
-  // 2. Perdas = pacotes cujos lotes venceram dentro do período selecionado
-  //    Fonte: mesma lógica do gráfico "Itens Vencidos" do dashboard principal.
   let perdas = [];
   if (incluirPerdas) {
     try {
-      // Busca lotes vencidos (data_validade <= dataFim informado)
-      // e cujo vencimento ocorreu após o início do período
-      let q = supabase
-        .from('lote')
-        .select(`
-          id_lote,
-          codigo_lote,
-          data_validade,
-          produto ( nome ),
-          pacote ( id_pacote )
-        `);
+      const conditions = [];
+      const values = [];
 
-      // Considera lotes vencidos dentro do período
-      if (inicioISO) q = q.gte('data_validade', filtros.dataInicio);
-      if (fimISO)    q = q.lte('data_validade', filtros.dataFim);
+      if (inicioISO) {
+        values.push(filtros.dataInicio);
+        conditions.push(`l.data_validade >= $${values.length}::date`);
+      }
+      if (fimISO) {
+        values.push(filtros.dataFim);
+        conditions.push(`l.data_validade <= $${values.length}::date`);
+      }
 
-      const { data, error } = await q;
-      if (error) {
-        console.error('[buscarRelatorioCompleto] Erro em lote (perdas):', error.message);
-      } else {
-        // Normaliza cada pacote como uma "movimentação" do tipo Perda
-        for (const lote of (data || [])) {
-          const dataPerda = `${lote.data_validade}T00:00:00`;
-          for (const pacote of (lote.pacote || [])) {
-            perdas.push({
-              id_movimentacao: `perda-${lote.id_lote}-${pacote.id_pacote}`,
-              tipo_movimentacao: 'Perda',
-              data_hora: dataPerda,
-              pacote: {
-                id_pacote: pacote.id_pacote,
-                lote: {
-                  codigo_lote: lote.codigo_lote,
-                  produto: lote.produto ?? null,
-                },
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const query = `
+        SELECT 
+          l.id_lote,
+          l.codigo_lote,
+          l.data_validade::text AS data_validade,
+          pr.nome AS produto_nome,
+          COALESCE(
+            json_agg(
+              json_build_object('id_pacote', p.id_pacote)
+            ) FILTER (WHERE p.id_pacote IS NOT NULL),
+            '[]'
+          ) AS pacotes
+        FROM lote l
+        LEFT JOIN produto pr ON l.id_produto = pr.id_produto
+        LEFT JOIN pacote p ON l.id_lote = p.id_lote
+        ${whereClause}
+        GROUP BY l.id_lote, l.codigo_lote, l.data_validade, pr.nome
+      `;
+
+      const { rows } = await pool.query(query, values);
+      for (const lote of rows) {
+        const dataPerda = `${lote.data_validade}T00:00:00`;
+        const pacotes = lote.pacotes || [];
+        for (const pacote of pacotes) {
+          perdas.push({
+            id_movimentacao: `perda-${lote.id_lote}-${pacote.id_pacote}`,
+            tipo_movimentacao: 'Perda',
+            data_hora: dataPerda,
+            pacote: {
+              id_pacote: pacote.id_pacote,
+              lote: {
+                codigo_lote: lote.codigo_lote,
+                produto: lote.produto_nome ? { nome: lote.produto_nome } : null,
               },
-            });
-          }
+            },
+          });
         }
       }
     } catch (e) {
@@ -307,7 +372,6 @@ export const buscarRelatorioCompleto = async (filtros = {}) => {
     }
   }
 
-  // 3. Mescla e ordena desc por data_hora
   return [...movimentacoes, ...perdas].sort(
     (a, b) => new Date(b.data_hora).getTime() - new Date(a.data_hora).getTime()
   );

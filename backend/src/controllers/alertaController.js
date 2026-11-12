@@ -1,6 +1,6 @@
 import { listarAlertas, deletarAlerta, criarAlerta } from '../models/estoqueModel.js';
 import { buscarLotesProximosVencimento } from '../models/dashboardModel.js';
-import supabase from '../config/supabase.js';
+import pool from '../config/database.js';
 
 export const listar = async (req, res) => {
   try {
@@ -33,24 +33,19 @@ export const checarVencimentosDiario = async (req, res) => {
     
     // 2. Busca alertas já gerados hoje para não duplicar
     const hoje = new Date().toISOString().split('T')[0];
-    const { data: alertasHoje, error } = await supabase
-      .from('alerta')
-      .select('id_lote')
-      .eq('tipo_alerta', 'VENCIMENTO_PROXIMO')
-      .gte('data_hora', `${hoje}T00:00:00.000Z`);
-      
-    if (error) throw new Error(`Erro ao checar alertas existentes: ${error.message}`);
+    const { rows: alertasHoje } = await pool.query(
+      'SELECT id_lote FROM alerta WHERE tipo_alerta = $1 AND data_hora >= $2',
+      ['VENCIMENTO_PROXIMO', `${hoje}T00:00:00.000Z`]
+    );
     
     const lotesComAlertaHoje = alertasHoje.map(a => a.id_lote);
     let gerados = 0;
     
     for (const lote of lotes) {
       // 3. Gera alerta se ainda não foi gerado hoje E se o lote tem pacotes ativos
-      // O buscarLotesProximosVencimento retorna array de pacotes na subquery
       const temPacotes = lote.pacote && lote.pacote.length > 0;
       
       if (!lotesComAlertaHoje.includes(lote.id_lote) && temPacotes) {
-        // O banco retorna data de validade como string YYYY-MM-DD
         const dataValidade = new Date(lote.data_validade + 'T00:00:00');
         const hojeObj = new Date(hoje + 'T00:00:00');
         const diasRestantes = Math.ceil((dataValidade - hojeObj) / (1000 * 60 * 60 * 24));

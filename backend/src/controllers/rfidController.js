@@ -7,7 +7,7 @@ import {
   associarEtiqueta,
 } from '../models/rfidModel.js';
 import { criarPacote } from '../models/estoqueModel.js';
-import supabase from '../config/supabase.js';
+import pool from '../config/database.js';
 
 // Importação lazy do io para evitar dependência circular com server.js
 const getIo = async () => {
@@ -171,15 +171,12 @@ export const cadastrarEtiqueta = async (req, res) => {
     const etiqueta = await associarEtiqueta(epcNormalizado, pacote.id_pacote);
 
     // 4. Registra movimentação de Entrada (vinculada ao usuário logado)
-    const { error: erroMov } = await supabase
-      .from('movimentacao_estoque')
-      .insert([{
-        tipo_movimentacao: 'Entrada',
-        id_pacote: pacote.id_pacote,
-        id_leitor: null,
-        id_usuario,
-      }]);
-    if (erroMov) {
+    try {
+      await pool.query(
+        'INSERT INTO movimentacao_estoque (tipo_movimentacao, id_pacote, id_leitor, id_usuario) VALUES ($1, $2, $3, $4)',
+        ['Entrada', pacote.id_pacote, null, id_usuario]
+      );
+    } catch (erroMov) {
       console.warn('[cadastrarEtiqueta] Falha ao registrar movimentação:', erroMov.message);
     }
 
@@ -196,4 +193,3 @@ export const cadastrarEtiqueta = async (req, res) => {
     return res.status(500).json({ erro: error.message });
   }
 };
-

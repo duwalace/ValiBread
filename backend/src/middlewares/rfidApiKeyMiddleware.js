@@ -1,5 +1,3 @@
-import supabase from '../config/supabase.js';
-
 // ── Constante de API Key para hardware RFID (C-03) ──────────────
 // O ESP32 deve enviar o header: X-Api-Key: <valor de RFID_API_KEY no .env>
 const RFID_API_KEY = process.env.RFID_API_KEY;

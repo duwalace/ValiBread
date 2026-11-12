@@ -26,9 +26,9 @@ O sistema rastreia produtos de panificação desde a saída da linha de produç�
 
 | Camada | Tecnologia |
 |---|---|
-| Backend | Node.js, Express 5, Supabase JS |
+| Backend | Node.js, Express 5, pg (PostgreSQL) |
 | Frontend Web | React 18, TypeScript, Vite, TailwindCSS, Shadcn UI |
-| Banco de Dados | Supabase (PostgreSQL) + Supabase Storage |
+| Banco de Dados | Azure Database for PostgreSQL + Azure Blob Storage |
 | IoT / Hardware | Leitores RFID (ESP32 ou gateway compatível) |
 | Autenticação | JWT (usuários) + API Key estática (hardware) |
 
@@ -39,7 +39,7 @@ O sistema rastreia produtos de panificação desde a saída da linha de produç�
 ### Pré-requisitos
 - [Node.js](https://nodejs.org/) v18+
 - [Git](https://git-scm.com/)
-- Uma conta no [Supabase](https://supabase.com/)
+- Uma instância do [Azure Database for PostgreSQL](https://azure.microsoft.com/)
 
 ### Instalação
 
@@ -53,7 +53,7 @@ npm run install:all
 
 # 3. Configure as variáveis de ambiente
 cp backend/.env.example backend/.env
-# Edite backend/.env com suas credenciais do Supabase e JWT_SECRET
+# Edite backend/.env com a DATABASE_URL do Azure e JWT_SECRET
 
 # 4. Execute a stack completa (1 único terminal)
 npm start
@@ -168,7 +168,7 @@ const char* apiKey = "chave_segura_para_o_hardware_rfid";
 
 ### Script SQL — Migração `tipo_operacao`
 
-Se já possui leitores cadastrados no banco, execute o arquivo `db/04_rfid_tipo_operacao.sql` no SQL Editor do Supabase para adicionar a coluna `tipo_operacao` à tabela `leitor_rfid`.
+Se já possui leitores cadastrados no banco, execute o arquivo `db/04_rfid_tipo_operacao.sql` no banco de dados para adicionar a coluna `tipo_operacao` à tabela `leitor_rfid`.
 
 ---
 

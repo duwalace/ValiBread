@@ -1,108 +1,192 @@
-import supabase from '../config/supabase.js';
-
-const exigirSucesso = (error, operacao) => {
-  if (error) throw new Error(`Erro ao ${operacao}: ${error.message}`);
-};
-
-const USUARIO_COM_PERFIL = 'id_usuario, nome, email, senha, id_perfil, perfil:perfil!fk_usuario_perfil(nome, descricao)';
+import pool from '../config/database.js';
 
 export const buscarUsuarioPorEmail = async (email) => {
-  const { data, error } = await supabase
-    .from('usuario')
-    .select(USUARIO_COM_PERFIL)
-    .eq('email', email)
-    .maybeSingle();
+  try {
+    const query = `
+      SELECT 
+        u.id_usuario, 
+        u.nome, 
+        u.email, 
+        u.senha, 
+        u.id_perfil, 
+        p.nome AS perfil_nome, 
+        p.descricao AS perfil_descricao
+      FROM usuario u
+      LEFT JOIN perfil p ON u.id_perfil = p.id_perfil
+      WHERE u.email = $1
+      LIMIT 1
+    `;
+    const { rows } = await pool.query(query, [email]);
+    if (rows.length === 0) return null;
 
-  exigirSucesso(error, 'buscar usuário por e-mail');
-  return data;
+    const row = rows[0];
+    return {
+      id_usuario: row.id_usuario,
+      nome: row.nome,
+      email: row.email,
+      senha: row.senha,
+      id_perfil: row.id_perfil,
+      perfil: row.perfil_nome ? {
+        nome: row.perfil_nome,
+        descricao: row.perfil_descricao
+      } : null
+    };
+  } catch (error) {
+    throw new Error(`Erro ao buscar usuário por e-mail: ${error.message}`);
+  }
 };
 
 export const inserirUsuario = async (dadosUsuario) => {
-  const { data, error } = await supabase
-    .from('usuario')
-    .insert({
-      nome: dadosUsuario.nome,
-      email: dadosUsuario.email,
-      senha: dadosUsuario.senha,
-      id_perfil: dadosUsuario.id_perfil,
-    })
-    .select('id_usuario, nome, email, senha, id_perfil')
-    .single();
-
-  exigirSucesso(error, 'cadastrar usuário');
-  return data;
+  try {
+    const query = `
+      INSERT INTO usuario (nome, email, senha, id_perfil)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id_usuario, nome, email, senha, id_perfil
+    `;
+    const values = [
+      dadosUsuario.nome,
+      dadosUsuario.email,
+      dadosUsuario.senha,
+      dadosUsuario.id_perfil
+    ];
+    const { rows } = await pool.query(query, values);
+    return rows[0];
+  } catch (error) {
+    throw new Error(`Erro ao cadastrar usuário: ${error.message}`);
+  }
 };
 
 export const listarUsuarios = async () => {
-  const { data, error } = await supabase
-    .from('usuario')
-    .select('id_usuario, nome, email, id_perfil, perfil:perfil!fk_usuario_perfil(nome)')
-    .order('nome', { ascending: true });
-
-  exigirSucesso(error, 'listar usuários');
-  return data ?? [];
+  try {
+    const query = `
+      SELECT 
+        u.id_usuario, 
+        u.nome, 
+        u.email, 
+        u.id_perfil, 
+        p.nome AS perfil_nome
+      FROM usuario u
+      LEFT JOIN perfil p ON u.id_perfil = p.id_perfil
+      ORDER BY u.nome ASC
+    `;
+    const { rows } = await pool.query(query);
+    return rows.map(row => ({
+      id_usuario: row.id_usuario,
+      nome: row.nome,
+      email: row.email,
+      id_perfil: row.id_perfil,
+      perfil: row.perfil_nome ? { nome: row.perfil_nome } : null
+    }));
+  } catch (error) {
+    throw new Error(`Erro ao listar usuários: ${error.message}`);
+  }
 };
 
 export const buscarUsuarioPorId = async (id) => {
-  const { data, error } = await supabase
-    .from('usuario')
-    .select('id_usuario, nome, email, id_perfil, perfil:perfil!fk_usuario_perfil(nome, descricao)')
-    .eq('id_usuario', id)
-    .maybeSingle();
+  try {
+    const query = `
+      SELECT 
+        u.id_usuario, 
+        u.nome, 
+        u.email, 
+        u.id_perfil, 
+        p.nome AS perfil_nome, 
+        p.descricao AS perfil_descricao
+      FROM usuario u
+      LEFT JOIN perfil p ON u.id_perfil = p.id_perfil
+      WHERE u.id_usuario = $1
+      LIMIT 1
+    `;
+    const { rows } = await pool.query(query, [id]);
+    if (rows.length === 0) return null;
 
-  exigirSucesso(error, 'buscar usuário por ID');
-  return data;
+    const row = rows[0];
+    return {
+      id_usuario: row.id_usuario,
+      nome: row.nome,
+      email: row.email,
+      id_perfil: row.id_perfil,
+      perfil: row.perfil_nome ? {
+        nome: row.perfil_nome,
+        descricao: row.perfil_descricao
+      } : null
+    };
+  } catch (error) {
+    throw new Error(`Erro ao buscar usuário por ID: ${error.message}`);
+  }
 };
 
 export const buscarSenhaUsuarioPorId = async (id) => {
-  const { data, error } = await supabase
-    .from('usuario')
-    .select('senha')
-    .eq('id_usuario', id)
-    .maybeSingle();
-
-  exigirSucesso(error, 'buscar senha do usuário');
-  return data;
+  try {
+    const query = `
+      SELECT senha
+      FROM usuario
+      WHERE id_usuario = $1
+      LIMIT 1
+    `;
+    const { rows } = await pool.query(query, [id]);
+    return rows.length > 0 ? rows[0] : null;
+  } catch (error) {
+    throw new Error(`Erro ao buscar senha do usuário: ${error.message}`);
+  }
 };
 
 export const atualizarUsuario = async (id, dados) => {
-  const atualizacao = {};
-  for (const campo of ['nome', 'email', 'senha', 'id_perfil']) {
-    if (dados[campo] !== undefined) atualizacao[campo] = dados[campo];
+  const camposPermitidos = ['nome', 'email', 'senha', 'id_perfil'];
+  const sets = [];
+  const values = [];
+  let index = 1;
+
+  for (const campo of camposPermitidos) {
+    if (dados[campo] !== undefined) {
+      sets.push(`${campo} = $${index}`);
+      values.push(dados[campo]);
+      index++;
+    }
   }
-  if (Object.keys(atualizacao).length === 0) {
+
+  if (sets.length === 0) {
     throw new Error('Nenhum campo para atualizar.');
   }
 
-  const { data, error } = await supabase
-    .from('usuario')
-    .update(atualizacao)
-    .eq('id_usuario', id)
-    .select('id_usuario, nome, email, id_perfil')
-    .maybeSingle();
+  values.push(id);
+  const query = `
+    UPDATE usuario
+    SET ${sets.join(', ')}
+    WHERE id_usuario = $${index}
+    RETURNING id_usuario, nome, email, id_perfil
+  `;
 
-  exigirSucesso(error, 'atualizar usuário');
-  if (!data) throw new Error('Usuário não encontrado.');
-  return data;
+  try {
+    const { rows } = await pool.query(query, values);
+    if (rows.length === 0) throw new Error('Usuário não encontrado.');
+    return rows[0];
+  } catch (error) {
+    if (error.message === 'Usuário não encontrado.') throw error;
+    throw new Error(`Erro ao atualizar usuário: ${error.message}`);
+  }
 };
 
 export const deletarUsuario = async (id) => {
-  const { count, error: countError } = await supabase
-    .from('relatorio')
-    .select('id_relatorio', { count: 'exact', head: true })
-    .eq('id_usuario', id);
+  try {
+    const { rows: relatorios } = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM relatorio WHERE id_usuario = $1',
+      [id]
+    );
+    const count = relatorios[0]?.total || 0;
+    if (count > 0) {
+      throw new Error(`Não é possível excluir o usuário: há ${count} relatório(s) vinculado(s).`);
+    }
 
-  exigirSucesso(countError, 'verificar relatórios vinculados');
-  if (count > 0) {
-    throw new Error(`Não é possível excluir o usuário: há ${count} relatório(s) vinculado(s).`);
+    const { rowCount } = await pool.query(
+      'DELETE FROM usuario WHERE id_usuario = $1',
+      [id]
+    );
+    if (rowCount === 0) throw new Error('Usuário não encontrado.');
+  } catch (error) {
+    if (error.message.includes('Não é possível excluir o usuário') || error.message === 'Usuário não encontrado.') {
+      throw error;
+    }
+    throw new Error(`Erro ao excluir usuário: ${error.message}`);
   }
-
-  const { data, error } = await supabase
-    .from('usuario')
-    .delete()
-    .eq('id_usuario', id)
-    .select('id_usuario');
-
-  exigirSucesso(error, 'excluir usuário');
-  if (!data?.length) throw new Error('Usuário não encontrado.');
 };

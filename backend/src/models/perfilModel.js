@@ -1,78 +1,89 @@
-import supabase from '../config/supabase.js';
-
-const exigirSucesso = (error, operacao) => {
-  if (error) throw new Error(`Erro ao ${operacao}: ${error.message}`);
-};
+import pool from '../config/database.js';
 
 export const listarPerfis = async () => {
-  const { data, error } = await supabase
-    .from('perfil')
-    .select('id_perfil, nome, descricao')
-    .order('nome', { ascending: true });
-
-  exigirSucesso(error, 'listar perfis');
-  return data ?? [];
+  try {
+    const { rows } = await pool.query(
+      'SELECT id_perfil, nome, descricao FROM perfil ORDER BY nome ASC'
+    );
+    return rows;
+  } catch (error) {
+    throw new Error(`Erro ao listar perfis: ${error.message}`);
+  }
 };
 
 export const buscarPerfilPorId = async (id) => {
-  const { data, error } = await supabase
-    .from('perfil')
-    .select('id_perfil, nome, descricao')
-    .eq('id_perfil', id)
-    .maybeSingle();
-
-  exigirSucesso(error, 'buscar perfil por ID');
-  return data;
+  try {
+    const { rows } = await pool.query(
+      'SELECT id_perfil, nome, descricao FROM perfil WHERE id_perfil = $1 LIMIT 1',
+      [id]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } catch (error) {
+    throw new Error(`Erro ao buscar perfil por ID: ${error.message}`);
+  }
 };
 
 export const criarPerfil = async (dados) => {
-  const { data, error } = await supabase
-    .from('perfil')
-    .insert({ nome: dados.nome, descricao: dados.descricao ?? null })
-    .select('id_perfil, nome, descricao')
-    .single();
-
-  exigirSucesso(error, 'criar perfil');
-  return data;
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO perfil (nome, descricao) VALUES ($1, $2) RETURNING id_perfil, nome, descricao',
+      [dados.nome, dados.descricao ?? null]
+    );
+    return rows[0];
+  } catch (error) {
+    throw new Error(`Erro ao criar perfil: ${error.message}`);
+  }
 };
 
 export const atualizarPerfil = async (id, dados) => {
   const atualizacao = {};
   if (dados.nome !== undefined) atualizacao.nome = dados.nome;
   if (dados.descricao !== undefined) atualizacao.descricao = dados.descricao;
-  if (Object.keys(atualizacao).length === 0) {
+
+  const campos = Object.keys(atualizacao);
+  if (campos.length === 0) {
     throw new Error('Nenhum campo para atualizar.');
   }
 
-  const { data, error } = await supabase
-    .from('perfil')
-    .update(atualizacao)
-    .eq('id_perfil', id)
-    .select('id_perfil, nome, descricao')
-    .maybeSingle();
+  const sets = campos.map((c, i) => `${c} = $${i + 1}`);
+  const values = campos.map(c => atualizacao[c]);
+  values.push(id);
 
-  exigirSucesso(error, 'atualizar perfil');
-  if (!data) throw new Error('Perfil não encontrado.');
-  return data;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE perfil SET ${sets.join(', ')} WHERE id_perfil = $${values.length} RETURNING id_perfil, nome, descricao`,
+      values
+    );
+    if (rows.length === 0) throw new Error('Perfil não encontrado.');
+    return rows[0];
+  } catch (error) {
+    if (error.message === 'Perfil não encontrado.' || error.message === 'Nenhum campo para atualizar.') {
+      throw error;
+    }
+    throw new Error(`Erro ao atualizar perfil: ${error.message}`);
+  }
 };
 
 export const deletarPerfil = async (id) => {
-  const { count, error: countError } = await supabase
-    .from('usuario')
-    .select('id_usuario', { count: 'exact', head: true })
-    .eq('id_perfil', id);
+  try {
+    const { rows: usuarios } = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM usuario WHERE id_perfil = $1',
+      [id]
+    );
+    const count = usuarios[0]?.total || 0;
+    if (count > 0) {
+      throw new Error(`Não é possível excluir o perfil: há ${count} usuário(s) vinculado(s).`);
+    }
 
-  exigirSucesso(countError, 'verificar usuários vinculados');
-  if (count > 0) {
-    throw new Error(`Não é possível excluir o perfil: há ${count} usuário(s) vinculado(s).`);
+    const { rowCount } = await pool.query(
+      'DELETE FROM perfil WHERE id_perfil = $1',
+      [id]
+    );
+    if (rowCount === 0) throw new Error('Perfil não encontrado.');
+  } catch (error) {
+    if (error.message.includes('Não é possível excluir o perfil') || error.message === 'Perfil não encontrado.') {
+      throw error;
+    }
+    throw new Error(`Erro ao excluir perfil: ${error.message}`);
   }
-
-  const { data, error } = await supabase
-    .from('perfil')
-    .delete()
-    .eq('id_perfil', id)
-    .select('id_perfil');
-
-  exigirSucesso(error, 'excluir perfil');
-  if (!data?.length) throw new Error('Perfil não encontrado.');
 };

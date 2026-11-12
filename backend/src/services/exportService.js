@@ -2,9 +2,9 @@ import exceljs from 'exceljs';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import jwt from 'jsonwebtoken';
+import { BlobServiceClient } from '@azure/storage-blob';
 import { buscarRelatorioMovimentacaoSecure } from '../models/dashboardModel.js';
-import { getTenantSupabase } from '../config/supabaseTenant.js';
-import supabase from '../config/supabase.js';
+import pool from '../config/database.js';
 
 const formatarDataHora = (dataStr) => {
   if (!dataStr) return "";
@@ -14,20 +14,11 @@ const formatarDataHora = (dataStr) => {
 
 /**
  * Gera um relatório personalizado em EXCEL ou PDF.
- *
- * Consulta movimentações + perdas via buscarRelatorioCompleto, respeitando
- * os filtros de tipo e período. Ambas as fontes (movimentacao_estoque e alerta)
- * são incluídas de acordo com o tipo selecionado:
- *   - 'TODOS'        → movimentações + perdas
- *   - 'Perda'        → apenas perdas
- *   - outro tipo     → apenas movimentações do tipo especificado
  */
 export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) => {
-  // Consulta com o JWT do usuário para que as políticas RLS do Supabase sejam aplicadas.
-  const tenantSupabase = getTenantSupabase(userToken);
-  const dadosBrutos = await buscarRelatorioMovimentacaoSecure(filtros, tenantSupabase);
+  const dadosBrutos = await buscarRelatorioMovimentacaoSecure(filtros);
 
-  const dados = dadosBrutos.map(item => [
+  const dados = (dadosBrutos || []).map(item => [
     formatarDataHora(item.data_hora),
     item.tipo_movimentacao,
     item.pacote?.lote?.produto?.nome || 'Desconhecido',
@@ -54,7 +45,6 @@ export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) =
 
     dados.forEach(linha => {
       const row = worksheet.addRow(linha);
-      // Destaca linhas de perda em vermelho claro
       if (linha[1] === 'Perda') {
         row.eachCell(cell => {
           cell.fill = {
@@ -81,7 +71,6 @@ export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) =
     doc.setFontSize(16);
     doc.text(titulo, 14, 15);
 
-    // Filtros aplicados no cabeçalho do PDF
     doc.setFontSize(10);
     const sub = `Período: ${filtros.dataInicio || 'Início'} a ${filtros.dataFim || 'Hoje'}`;
     doc.text(sub, 14, 22);
@@ -97,9 +86,8 @@ export const gerarRelatorioPersonalizado = async (filtros, userToken, formato) =
         fontStyle: 'bold',
       },
       alternateRowStyles: {
-        fillColor: [245, 240, 235], // Cinza Quente
+        fillColor: [245, 240, 235],
       },
-      // Destaca linhas de perda com fundo avermelhado
       didParseCell(data) {
         if (data.section === 'body' && dados[data.row.index]?.[1] === 'Perda') {
           data.cell.styles.fillColor = [253, 232, 232];
@@ -134,29 +122,34 @@ const registrarExport = async (buffer, formato, userToken, tipo) => {
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       : 'application/pdf';
 
-    const { error: uploadError } = await supabase.storage
-      .from('chatbot_exports')
-      .upload(fileName, buffer, {
-        contentType,
-        upsert: true,
-      });
+    let urlArquivo = `/exports/${fileName}`;
+    const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+    const containerName = process.env.AZURE_STORAGE_CONTAINER || 'chatbot-exports';
 
-    if (uploadError) {
-      console.error('Erro ao fazer upload para o Supabase no dashboard:', uploadError);
-      return;
+    if (connectionString) {
+      try {
+        const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
+        const containerClient = blobServiceClient.getContainerClient(containerName);
+        await containerClient.createIfNotExists();
+
+        const blockBlobClient = containerClient.getBlockBlobClient(fileName);
+        await blockBlobClient.uploadData(buffer, {
+          blobHTTPHeaders: { blobContentType: contentType }
+        });
+        urlArquivo = blockBlobClient.url;
+      } catch (uploadError) {
+        console.error('Erro ao fazer upload para o Azure Blob Storage:', uploadError.message);
+      }
+    } else {
+      console.warn('[registrarExport] AZURE_STORAGE_CONNECTION_STRING não configurada no .env. Registro salvo sem upload para Blob.');
     }
 
-    const { data: urlData } = supabase.storage
-      .from('chatbot_exports')
-      .getPublicUrl(fileName);
-
-    await supabase.from('chatbot_export').insert([{
-      id_usuario,
-      nome_arquivo: fileName,
-      url_arquivo: urlData.publicUrl,
-    }]);
+    await pool.query(
+      'INSERT INTO chatbot_export (id_usuario, nome_arquivo, url_arquivo) VALUES ($1, $2, $3)',
+      [id_usuario, fileName, urlArquivo]
+    );
 
   } catch (error) {
-    console.error('Erro ao registrar export do dashboard:', error);
+    console.error('Erro ao registrar export do dashboard:', error.message);
   }
 };
