@@ -1,30 +1,35 @@
-import pool from '../config/database.js';
+import supabase from '../config/supabase.js';
 
 export const listarExports = async (req, res) => {
   try {
-    const query = `
-      SELECT 
-        c.id_export,
-        c.nome_arquivo,
-        c.url_arquivo,
-        c.data_geracao,
-        c.id_usuario,
-        u.nome AS usuario_nome,
-        u.email AS usuario_email
-      FROM chatbot_export c
-      LEFT JOIN usuario u ON c.id_usuario = u.id_usuario
-      ORDER BY c.data_geracao DESC
-    `;
+    const { data, error } = await supabase
+      .from('chatbot_export')
+      .select(`
+        id_export,
+        nome_arquivo,
+        url_arquivo,
+        data_geracao,
+        id_usuario,
+        usuario (
+          nome,
+          email
+        )
+      `)
+      .order('data_geracao', { ascending: false });
 
-    const { rows } = await pool.query(query);
+    if (error) {
+      console.error('Erro ao buscar exports:', error);
+      return res.status(500).json({ erro: 'Erro ao listar exports do chatbot.' });
+    }
 
-    const result = rows.map(item => ({
+    // Remapear para facilitar o uso no frontend
+    const result = data.map(item => ({
       id_export: item.id_export,
       nome_arquivo: item.nome_arquivo,
       url_arquivo: item.url_arquivo,
       data_geracao: item.data_geracao,
-      usuario_nome: item.usuario_nome || 'Desconhecido',
-      usuario_email: item.usuario_email || 'Desconhecido',
+      usuario_nome: item.usuario?.nome || 'Desconhecido',
+      usuario_email: item.usuario?.email || 'Desconhecido',
     }));
 
     return res.status(200).json(result);
