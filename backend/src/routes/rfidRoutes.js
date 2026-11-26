@@ -5,6 +5,7 @@ import { listar as listarLeitores, buscar as buscarLeitor, criar as criarLeitor,
 import { listar as listarMovimentacoes, registrar as registrarMovimentacao } from '../controllers/movimentacaoController.js';
 import { autenticar } from '../middlewares/authMiddleware.js';
 import { validarApiKeyRfid } from '../middlewares/rfidApiKeyMiddleware.js';
+import dispositivoRoutes from './dispositivoRoutes.js';
 
 const rfidRoutes = express.Router();
 
@@ -36,5 +37,9 @@ rfidRoutes.patch('/leitor/:id/status', autenticar, atualizarStatusLeitor);
 // ── Movimentações ───────────────────────────────────────────────
 rfidRoutes.get('/movimentacao', autenticar, listarMovimentacoes);
 rfidRoutes.post('/movimentacao', autenticar, registrarMovimentacao);
+
+// ── Dispositivo ESP32 (leitor físico — sem JWT, apenas API Key) ──
+// Cadastrar, Consultar, Saída e Excluir pelo leitor de mão
+rfidRoutes.use('/dispositivo', dispositivoRoutes);
 
 export default rfidRoutes;
